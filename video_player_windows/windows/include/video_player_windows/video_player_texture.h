@@ -41,6 +41,8 @@ public:
   void SetupEventChannel(flutter::BinaryMessenger *messenger);
 
   int64_t GetPosition();
+  void Play();
+  void Pause();
 
 private:
   std::tuple<bool, std::optional<VideoFrame>, std::optional<AudioFrame>> ReadFrame();
@@ -84,6 +86,7 @@ private:
   std::atomic<bool> has_stream_handler;
   std::atomic<bool> done;
   std::atomic<bool> stopped;
+  std::atomic<bool> paused;
   flutter::TextureRegistrar *registrar;
   int64_t tid;
   std::queue<VideoFrame> video_frames;

@@ -54,7 +54,6 @@ class _MyAppState extends State<MyApp> {
   void _initializeVideo(String url) {
     _controller = VideoPlayerController.network(url);
     _controller!.initialize();
-    _controller!.play();
     setState(() {
       _videoDisposed = false;
     });
@@ -93,6 +92,17 @@ class _MyAppState extends State<MyApp> {
               ? Text("Video is disposed")
               : VideoPlayer(_controller!),
         ),
+        floatingActionButton: !_videoDisposed
+            ? ValueListenableBuilder<VideoPlayerValue>(
+                valueListenable: _controller!,
+                builder: (context, value, _) => FloatingActionButton(
+                  child: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
+                  onPressed: () => value.isPlaying
+                      ? _controller!.pause()
+                      : _controller!.play(),
+                ),
+              )
+            : null,
         drawer: Drawer(
           child: ListView(
             children: _videoDisposed

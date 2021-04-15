@@ -47,6 +47,10 @@ private:
                      const flutter::MessageReply<flutter::EncodableValue> &reply);
   void HandlePosition(const flutter::EncodableValue &message,
                       const flutter::MessageReply<flutter::EncodableValue> &reply);
+  void HandlePlay(const flutter::EncodableValue &message,
+                  const flutter::MessageReply<flutter::EncodableValue> &reply);
+  void HandlePause(const flutter::EncodableValue &message,
+                   const flutter::MessageReply<flutter::EncodableValue> &reply);
   void TextureOpStub(const flutter::EncodableValue &message,
                      const flutter::MessageReply<flutter::EncodableValue> &reply);
 };
@@ -61,9 +65,9 @@ void VideoPlayerWindowsPlugin::SetupMethods(flutter::BinaryMessenger *messenger)
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.dispose",
              std::bind(&VideoPlayerWindowsPlugin::HandleDispose, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.play",
-             std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
+             std::bind(&VideoPlayerWindowsPlugin::HandlePlay, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.pause",
-             std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
+             std::bind(&VideoPlayerWindowsPlugin::HandlePause, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setPlaybackSpeed",
              std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setVolume",
@@ -125,6 +129,32 @@ void VideoPlayerWindowsPlugin::HandlePosition(
   pm.textureId = tm.textureId;
   pm.position = tex->GetPosition();
   reply(WrapResult(pm.toEncodable()));
+}
+
+void VideoPlayerWindowsPlugin::HandlePause(
+    const flutter::EncodableValue &message,
+    const flutter::MessageReply<flutter::EncodableValue> &reply) {
+  TextureMessage tm(message);
+  if (textures.find(tm.textureId) == textures.end()) {
+    reply(WrapError(flutter::EncodableValue("Texture not found")));
+    return;
+  }
+  std::unique_ptr<VideoPlayerTexture> &tex = textures[tm.textureId];
+  tex->Pause();
+  reply(WrapResult(std::monostate()));
+}
+
+void VideoPlayerWindowsPlugin::HandlePlay(
+    const flutter::EncodableValue &message,
+    const flutter::MessageReply<flutter::EncodableValue> &reply) {
+  TextureMessage tm(message);
+  if (textures.find(tm.textureId) == textures.end()) {
+    reply(WrapError(flutter::EncodableValue("Texture not found")));
+    return;
+  }
+  std::unique_ptr<VideoPlayerTexture> &tex = textures[tm.textureId];
+  tex->Play();
+  reply(WrapResult(std::monostate()));
 }
 
 void VideoPlayerWindowsPlugin::TextureOpStub(

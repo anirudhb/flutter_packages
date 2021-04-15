@@ -149,6 +149,12 @@ void VideoPlayerTexture::DecodeThreadProc() {
   std::cerr << "Max queue items: " << max_queue_items << std::endl;
   std::cerr << "Max audio queue items: " << max_aqueue_items << std::endl;
   while (!stopped) {
+    // Check if paused
+    if (paused) {
+      while (paused)
+        std::this_thread::sleep_for(std::chrono::microseconds(1000));
+      // nothing to do
+    }
     std::optional<VideoFrame> frame;
     std::optional<AudioFrame> adFrame;
     while (!frame.has_value() && !adFrame.has_value()) {
@@ -203,6 +209,12 @@ void VideoPlayerTexture::AudioThreadProc() {
   // determine proper pts size
   int64_t apts_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000;
   while (!stopped) {
+    // Check if paused
+    if (paused) {
+      while (paused)
+        std::this_thread::sleep_for(std::chrono::microseconds(1000));
+      // frame thread should reset playback_start
+    }
     AudioFrame frame;
     while (true) {
       m_audio_frames.lock();
@@ -234,6 +246,14 @@ done:
 void VideoPlayerTexture::FrameThreadProc() {
   playback_start = std::chrono::system_clock::now();
   while (!stopped) {
+    // Check if paused
+    if (paused) {
+      while (paused)
+        std::this_thread::sleep_for(std::chrono::microseconds(1000));
+      // Reset playback start
+      playback_start = std::chrono::system_clock::now() -
+                       std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
+    }
     VideoFrame frame;
     while (true) {
       m_video_frames.lock();
@@ -345,6 +365,8 @@ void VideoPlayerTexture::SendCompleted() {
 }
 
 int64_t VideoPlayerTexture::GetPosition() { return current_video_frame.frame_number * 1000 / fps; }
+void VideoPlayerTexture::Pause() { paused = true; }
+void VideoPlayerTexture::Play() { paused = false; }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // Forces destructor to be called, so that memory doesn't leak
