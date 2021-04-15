@@ -344,7 +344,7 @@ void VideoPlayerTexture::SendCompleted() {
   fl_event_sink->Success(flutter::EncodableValue(m));
 }
 
-int64_t VideoPlayerTexture::GetPosition() { return vCodecCtx->frame_number * 1000 / fps; }
+int64_t VideoPlayerTexture::GetPosition() { return current_video_frame.frame_number * 1000 / fps; }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // Forces destructor to be called, so that memory doesn't leak

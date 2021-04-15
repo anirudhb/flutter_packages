@@ -54,6 +54,7 @@ class _MyAppState extends State<MyApp> {
   void _initializeVideo(String url) {
     _controller = VideoPlayerController.network(url);
     _controller!.initialize();
+    _controller!.play();
     setState(() {
       _videoDisposed = false;
     });
@@ -68,13 +69,24 @@ class _MyAppState extends State<MyApp> {
     Navigator.of(_scaffoldKey.currentContext!).pop();
   }
 
+  void _seekTo3Seconds() {
+    _controller?.seekTo(Duration(seconds: 3));
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         key: _scaffoldKey,
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: !_videoDisposed
+              ? ValueListenableBuilder<VideoPlayerValue>(
+                  valueListenable: _controller!,
+                  builder: (context, value, _) => Text(
+                    "Video is ${value.position.inSeconds} / ${value.duration.inSeconds}",
+                  ),
+                )
+              : const Text("Video not initialized"),
         ),
         body: Center(
           child: _videoDisposed
@@ -92,6 +104,10 @@ class _MyAppState extends State<MyApp> {
                       ),
                   ]
                 : [
+                    ListTile(
+                      title: Text("Seek to 3s"),
+                      onTap: _seekTo3Seconds,
+                    ),
                     ListTile(
                       title: Text("Dispose video"),
                       onTap: _disposeVideo,
