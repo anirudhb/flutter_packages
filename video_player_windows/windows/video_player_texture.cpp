@@ -10,9 +10,12 @@
 #include <ao.h>
 
 VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
+  // Test asan
+  // malloc(99);
+
   av_log_set_level(AV_LOG_VERBOSE);
   av_log_set_callback(av_log_default_callback);
-  av_register_all();
+  // av_register_all();
 
   AVDictionary *opts = NULL;
   // 10 seconds
@@ -151,7 +154,9 @@ void VideoPlayerTexture::DecodeThreadProc() {
   // Determine maximum number of queue items
   // Would like to keep memory usage <=200mb
   size_t max_queue_items = 209715200 / (vCodecCtx->width * vCodecCtx->height * 4);
+  size_t max_aqueue_items = 209715200 / (2 * 44100 * 1);
   std::cerr << "Max queue items: " << max_queue_items << std::endl;
+  std::cerr << "Max audio queue items: " << max_aqueue_items << std::endl;
   while (!stopped) {
     std::optional<VideoFrame> frame;
     std::optional<AudioFrame> adFrame;
@@ -161,7 +166,15 @@ void VideoPlayerTexture::DecodeThreadProc() {
         goto done;
     }
     if (adFrame.has_value()) {
-      m_audio_frames.lock();
+      while (true) {
+        m_audio_frames.lock();
+        if (audio_frames.size() <= max_aqueue_items - 1)
+          break;
+        m_audio_frames.unlock();
+        if (stopped)
+          goto done;
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+      }
       audio_frames.emplace(std::move(*adFrame));
       m_audio_frames.unlock();
     }
@@ -270,6 +283,8 @@ void VideoPlayerTexture::FrameThreadProc() {
       //   fl_stream_handler->SendTimeUpdate(time);
       // }
     }
+    // force destruction
+    current_video_frame = VideoFrame();
     current_video_frame = std::move(frame);
     // render_buffer = frame.data.data();
     // while (current_pts < target_pts) {
@@ -309,6 +324,8 @@ VideoPlayerTexture::ReadFrame() {
                   vFrameRGB->linesize);
         // got a frame
         frame = VideoFrame(buffer, bufsize, vFrame->pts, vCodecCtx->frame_number);
+        // av_frame_unref(vFrame);
+        // av_frame_unref(vFrameRGB);
         // frameFinished = false;
         // frameFinished = 0;
       }
@@ -329,8 +346,10 @@ VideoPlayerTexture::ReadFrame() {
         av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
         int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
         adFrame = AudioFrame(out, ret * aCodecCtx->channels, aFrame->pkt_pts);
+        // av_frame_unref(aFrame);
       }
     }
+    // av_packet_unref(&packet);
     av_free_packet(&packet);
   } else {
     std::cout << "Done with video" << std::endl;
@@ -369,6 +388,8 @@ int64_t VideoPlayerTexture::GetPosition() { return vCodecCtx->frame_number * 100
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // std::cerr << "Copying buffer" << std::endl;
+  // Forces destructor to be called, so that memory doesn't leak
+  current_video_frame2 = VideoFrame();
   current_video_frame2 = std::move(current_video_frame);
   fl_buffer.buffer = current_video_frame2.data.data();
   fl_buffer.width = vCodecCtx->width;

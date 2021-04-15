@@ -92,9 +92,9 @@ private:
   int64_t tid;
   std::queue<VideoFrame> video_frames;
   std::mutex m_video_frames;
-  VideoFrame current_video_frame;
+  VideoFrame current_video_frame = VideoFrame();
   // Used by renderer
-  VideoFrame current_video_frame2;
+  VideoFrame current_video_frame2 = VideoFrame();
   std::queue<AudioFrame> audio_frames;
   std::mutex m_audio_frames;
   AudioFrame current_audio_frame;
