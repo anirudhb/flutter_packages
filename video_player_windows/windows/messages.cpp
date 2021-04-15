@@ -6,6 +6,26 @@ using namespace std::string_literals;
 const auto kPositionKey = flutter::EncodableValue("position"s);
 const auto kTextureIdKey = flutter::EncodableValue("textureId"s);
 
+PositionMessage::PositionMessage(const flutter::EncodableValue &value) {
+  if (!std::holds_alternative<flutter::EncodableMap>(value))
+    return;
+  flutter::EncodableMap map = std::get<flutter::EncodableMap>(value);
+  if (map.find(kTextureIdKey) != map.end()) {
+    flutter::EncodableValue thing = map[kTextureIdKey];
+    if (std::holds_alternative<int32_t>(thing))
+      textureId = std::get<int32_t>(thing);
+    if (std::holds_alternative<int64_t>(thing))
+      textureId = std::get<int64_t>(thing);
+  }
+  if (map.find(kPositionKey) != map.end()) {
+    flutter::EncodableValue thing = map[kPositionKey];
+    if (std::holds_alternative<int32_t>(thing))
+      position = std::get<int32_t>(thing);
+    if (std::holds_alternative<int64_t>(thing))
+      position = std::get<int64_t>(thing);
+  }
+}
+
 flutter::EncodableValue PositionMessage::toEncodable() {
   flutter::EncodableMap m;
   m[kTextureIdKey] = flutter::EncodableValue(textureId);

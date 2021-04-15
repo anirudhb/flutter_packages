@@ -51,6 +51,8 @@ private:
                   const flutter::MessageReply<flutter::EncodableValue> &reply);
   void HandlePause(const flutter::EncodableValue &message,
                    const flutter::MessageReply<flutter::EncodableValue> &reply);
+  void HandleSeek(const flutter::EncodableValue &message,
+                  const flutter::MessageReply<flutter::EncodableValue> &reply);
   void TextureOpStub(const flutter::EncodableValue &message,
                      const flutter::MessageReply<flutter::EncodableValue> &reply);
 };
@@ -76,6 +78,8 @@ void VideoPlayerWindowsPlugin::SetupMethods(flutter::BinaryMessenger *messenger)
              std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.position",
              std::bind(&VideoPlayerWindowsPlugin::HandlePosition, this, _1, _2));
+  InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.seekTo",
+             std::bind(&VideoPlayerWindowsPlugin::HandleSeek, this, _1, _2));
 }
 
 void VideoPlayerWindowsPlugin::InitMethod(flutter::BinaryMessenger *messenger,
@@ -154,6 +158,19 @@ void VideoPlayerWindowsPlugin::HandlePlay(
   }
   std::unique_ptr<VideoPlayerTexture> &tex = textures[tm.textureId];
   tex->Play();
+  reply(WrapResult(std::monostate()));
+}
+
+void VideoPlayerWindowsPlugin::HandleSeek(
+    const flutter::EncodableValue &message,
+    const flutter::MessageReply<flutter::EncodableValue> &reply) {
+  PositionMessage pm(message);
+  if (textures.find(pm.textureId) == textures.end()) {
+    reply(WrapError(flutter::EncodableValue("Texture not found")));
+    return;
+  }
+  std::unique_ptr<VideoPlayerTexture> &tex = textures[pm.textureId];
+  tex->Seek(pm.position);
   reply(WrapResult(std::monostate()));
 }
 

@@ -8,6 +8,9 @@ struct PositionMessage {
   int64_t textureId;
   int64_t position;
 
+  PositionMessage() = default;
+  PositionMessage(const flutter::EncodableValue &);
+
   flutter::EncodableValue toEncodable();
 };
 

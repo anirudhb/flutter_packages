@@ -43,6 +43,7 @@ public:
   int64_t GetPosition();
   void Play();
   void Pause();
+  void Seek(int64_t millis);
 
 private:
   std::tuple<bool, std::optional<VideoFrame>, std::optional<AudioFrame>> ReadFrame();

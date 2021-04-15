@@ -151,7 +151,7 @@ void VideoPlayerTexture::DecodeThreadProc() {
   while (!stopped) {
     // Check if paused
     if (paused) {
-      while (paused)
+      while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // nothing to do
     }
@@ -159,7 +159,7 @@ void VideoPlayerTexture::DecodeThreadProc() {
     std::optional<AudioFrame> adFrame;
     while (!frame.has_value() && !adFrame.has_value()) {
       std::tie(done, frame, adFrame) = ReadFrame();
-      if (done)
+      if (done || stopped)
         goto done;
     }
     if (adFrame.has_value()) {
@@ -211,7 +211,7 @@ void VideoPlayerTexture::AudioThreadProc() {
   while (!stopped) {
     // Check if paused
     if (paused) {
-      while (paused)
+      while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // frame thread should reset playback_start
     }
@@ -225,7 +225,7 @@ void VideoPlayerTexture::AudioThreadProc() {
         break;
       }
       m_audio_frames.unlock();
-      if (done) {
+      if (done || stopped) {
         goto done;
       }
       std::cerr << "Waiting for audio frame..." << std::endl;
@@ -248,7 +248,7 @@ void VideoPlayerTexture::FrameThreadProc() {
   while (!stopped) {
     // Check if paused
     if (paused) {
-      while (paused)
+      while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // Reset playback start
       playback_start = std::chrono::system_clock::now() -
@@ -264,7 +264,7 @@ void VideoPlayerTexture::FrameThreadProc() {
         break;
       }
       m_video_frames.unlock();
-      if (done) {
+      if (done || stopped) {
         goto done;
       }
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
@@ -310,7 +310,11 @@ VideoPlayerTexture::ReadFrame() {
         sws_scale(swsCtx, vFrame->data, vFrame->linesize, 0, vCodecCtx->height, vFrameRGB->data,
                   vFrameRGB->linesize);
         // got a frame
-        frame = VideoFrame(buffer, bufsize, vFrame->pts, vCodecCtx->frame_number);
+        // Can't trust pts_size_micros since it may be warped by playback speed
+        int64_t frame_number = vFrame->pts *
+                               (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000) * fps /
+                               1000000;
+        frame = VideoFrame(buffer, bufsize, vFrame->pts, frame_number);
       }
     } else if (aStream != -1 && packet.stream_index == aStream) {
       int e = avcodec_send_packet(aCodecCtx, &packet);
@@ -367,6 +371,50 @@ void VideoPlayerTexture::SendCompleted() {
 int64_t VideoPlayerTexture::GetPosition() { return current_video_frame.frame_number * 1000 / fps; }
 void VideoPlayerTexture::Pause() { paused = true; }
 void VideoPlayerTexture::Play() { paused = false; }
+void VideoPlayerTexture::Seek(int64_t millis) {
+  bool wasPlaying = !paused;
+  Pause();
+  m_video_frames.lock();
+  m_audio_frames.lock();
+  // Can't trust pts_size_micros since it may be warped by playback speed
+  int64_t target_pts = millis * 1000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
+  target_pts = std::max(target_pts, static_cast<int64_t>(0));
+  av_seek_frame(cFormatCtx, vStream, target_pts, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+  if (aStream != -1) {
+    avcodec_flush_buffers(aCodecCtx);
+    // Frames are stale
+    while (!audio_frames.empty())
+      audio_frames.pop();
+  }
+  avcodec_flush_buffers(vCodecCtx);
+  // Frames are stale
+  while (!video_frames.empty())
+    video_frames.pop();
+  current_audio_frame.pts = target_pts;
+  // Read frames until we get one
+  // so that the user does not have a bad experience
+  // This may result in the pts being off by a few frames
+  // but it should not be a big deal
+  std::optional<VideoFrame> vf;
+  std::optional<AudioFrame> af;
+  while (true) {
+    std::optional<VideoFrame> vf2;
+    std::optional<AudioFrame> af2;
+    std::tie(done, vf2, af2) = ReadFrame();
+    if (vf2.has_value())
+      vf = std::move(vf2);
+    if (af2.has_value())
+      af = std::move(af2);
+    if (done || (vf.has_value() && af.has_value()))
+      break;
+  }
+  current_video_frame = std::move(*vf);
+  current_audio_frame = std::move(*af);
+  m_video_frames.unlock();
+  m_audio_frames.unlock();
+  if (wasPlaying)
+    Play();
+}
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // Forces destructor to be called, so that memory doesn't leak

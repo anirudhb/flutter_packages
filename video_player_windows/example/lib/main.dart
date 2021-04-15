@@ -68,8 +68,8 @@ class _MyAppState extends State<MyApp> {
     Navigator.of(_scaffoldKey.currentContext!).pop();
   }
 
-  void _seekTo3Seconds() {
-    _controller?.seekTo(Duration(seconds: 3));
+  void _seekTo30Seconds() {
+    _controller?.seekTo(Duration(seconds: 30));
   }
 
   @override
@@ -115,8 +115,8 @@ class _MyAppState extends State<MyApp> {
                   ]
                 : [
                     ListTile(
-                      title: Text("Seek to 3s"),
-                      onTap: _seekTo3Seconds,
+                      title: Text("Seek to 30s"),
+                      onTap: _seekTo30Seconds,
                     ),
                     ListTile(
                       title: Text("Dispose video"),
