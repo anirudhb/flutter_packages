@@ -10,12 +10,8 @@
 #include <ao.h>
 
 VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
-  // Test asan
-  // malloc(99);
-
   av_log_set_level(AV_LOG_VERBOSE);
   av_log_set_callback(av_log_default_callback);
-  // av_register_all();
 
   AVDictionary *opts = NULL;
   // 10 seconds
@@ -88,10 +84,8 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
 
   swsCtx = sws_getContext(vCodecCtx->width, vCodecCtx->height, vCodecCtx->pix_fmt, vCodecCtx->width,
                           vCodecCtx->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, NULL, NULL, NULL);
-  // swr_init(swrCtx);
 }
 
-// VideoPlayerTexture::~VideoPlayerTexture() {}
 VideoPlayerTexture::~VideoPlayerTexture() {
   stopped = true;
   if (decodeThread.joinable()) {
@@ -118,14 +112,11 @@ int64_t VideoPlayerTexture::RegisterWithTextureRegistrar(flutter::TextureRegistr
   using namespace std::placeholders;
 
   this->registrar = registrar;
-  // tex = std::move();
 
   texture_ = std::make_unique<flutter::TextureVariant>(flutter::PixelBufferTexture(
       [this](size_t width, size_t height) -> const FlutterDesktopPixelBuffer * {
         return this->CopyPixelBuffer(width, height);
       }));
-
-  // std::unique_ptr<flutter::TextureVariant> tv = std::make_unique<flutter::TextureVariant>(tex);
 
   decodeThread = std::thread(std::bind(&VideoPlayerTexture::DecodeThreadProc, this));
   frameThread = std::thread(std::bind(&VideoPlayerTexture::FrameThreadProc, this));
@@ -188,7 +179,6 @@ void VideoPlayerTexture::DecodeThreadProc() {
         m_video_frames.unlock();
         if (stopped)
           goto done;
-        // std::cerr << "Waiting for queue space..." << std::endl;
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       }
       // Add frame
@@ -233,9 +223,6 @@ void VideoPlayerTexture::AudioThreadProc() {
     auto target = playback_start + std::chrono::microseconds(apts_size_micros * frame.pts);
     if (now < target) {
       std::this_thread::sleep_for(target - now);
-      // std::this_thread::sleep_for(
-      //     std::chrono::microseconds(pts_size_micros * (target_pts - current_pts)));
-      // current_pts = target_pts;
     }
     // Present the frame
     ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
@@ -260,44 +247,25 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (done) {
         goto done;
       }
-      // std::cerr << "Waiting for frame..." << std::endl;
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
     }
     // We have a frame...
-    // std::cerr << "Current pts = " << current_pts << " target = " << target_pts << std::endl;
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(pts_size_micros * frame.pts);
     if (now < target) {
       std::this_thread::sleep_for(target - now);
-      // std::this_thread::sleep_for(
-      //     std::chrono::microseconds(pts_size_micros * (target_pts - current_pts)));
-      // current_pts = target_pts;
     }
-    // std::cerr << "frame number=" << vCodecCtx->frame_number << std::endl;
     if (frame.frame_number % fps == 0) {
       int64_t time = frame.frame_number / fps;
-      // std::cerr << "Sending time update secs=" << time << std::endl;
       SendTimeUpdate(time);
-      // if (has_stream_handler) {
-      //   std::cerr << "stream handler is live" << std::endl;
-      //   fl_stream_handler->SendTimeUpdate(time);
-      // }
     }
     // force destruction
     current_video_frame = VideoFrame();
     current_video_frame = std::move(frame);
-    // render_buffer = frame.data.data();
-    // while (current_pts < target_pts) {
-    //   std::this_thread::sleep_for(std::chrono::milliseconds(pts_size_millis));
-    //   current_pts++;
-    // }
-    // std::cerr << "Marking texture frame available" << std::endl;
     registrar->MarkTextureFrameAvailable(tid);
   }
 done:
   SendCompleted();
-  // if (fl_stream_handler)
-  //   fl_stream_handler->SendCompleted();
 }
 
 // first is whether done, second is optional frame, third is optional aframe
@@ -316,7 +284,6 @@ VideoPlayerTexture::ReadFrame() {
         av_strerror(-e, buf, AV_ERROR_MAX_STRING_SIZE);
         std::cerr << buf << std::endl;
       }
-      // avcodec_send_packet(vCodecCtx, &packet);
       e = avcodec_receive_frame(vCodecCtx, vFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
         target_pts = vFrame->pts;
@@ -324,10 +291,6 @@ VideoPlayerTexture::ReadFrame() {
                   vFrameRGB->linesize);
         // got a frame
         frame = VideoFrame(buffer, bufsize, vFrame->pts, vCodecCtx->frame_number);
-        // av_frame_unref(vFrame);
-        // av_frame_unref(vFrameRGB);
-        // frameFinished = false;
-        // frameFinished = 0;
       }
     } else if (aStream != -1 && packet.stream_index == aStream) {
       int e = avcodec_send_packet(aCodecCtx, &packet);
@@ -337,7 +300,6 @@ VideoPlayerTexture::ReadFrame() {
         av_strerror(-e, buf, AV_ERROR_MAX_STRING_SIZE);
         std::cerr << buf << std::endl;
       }
-      // avcodec_send_packet(vCodecCtx, &packet);
       e = avcodec_receive_frame(aCodecCtx, aFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
         const uint8_t **in = const_cast<const uint8_t **>(aFrame->extended_data);
@@ -346,10 +308,8 @@ VideoPlayerTexture::ReadFrame() {
         av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
         int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
         adFrame = AudioFrame(out, ret * aCodecCtx->channels, aFrame->pkt_pts);
-        // av_frame_unref(aFrame);
       }
     }
-    // av_packet_unref(&packet);
     av_free_packet(&packet);
   } else {
     std::cout << "Done with video" << std::endl;
@@ -387,7 +347,6 @@ void VideoPlayerTexture::SendCompleted() {
 int64_t VideoPlayerTexture::GetPosition() { return vCodecCtx->frame_number * 1000 / fps; }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
-  // std::cerr << "Copying buffer" << std::endl;
   // Forces destructor to be called, so that memory doesn't leak
   current_video_frame2 = VideoFrame();
   current_video_frame2 = std::move(current_video_frame);

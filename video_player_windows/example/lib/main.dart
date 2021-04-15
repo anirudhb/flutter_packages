@@ -18,23 +18,43 @@ class _MyAppState extends State<MyApp> {
   bool _videoDisposed = true;
   VideoPlayerController? _controller;
   GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey();
+  // String? currentVideoUrl;
+  List<List<String>> videos = [
+    [
+      "Big Buck Bunny 10s 2MB H264",
+      "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_2MB.mp4"
+    ],
+    [
+      "Big Buck Bunny 10s 10MB H264",
+      "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4"
+    ],
+    [
+      "Big Buck Bunny 10s 2MB AV1",
+      "https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_2MB.mp4"
+    ],
+    [
+      "Big Buck Bunny 10s 30MB AV1",
+      "https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_30MB.mp4"
+    ],
+    [
+      "Big Buck Bunny (mp4)",
+      "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    ],
+    [
+      "Sintel (HLS)",
+      "https://multiplatform-f.akamaihd.net/i/multi/april11/sintel/sintel-hd_,512x288_450_b,640x360_700_b,768x432_1000_b,1024x576_1400_m,.mp4.csmil/master.m3u8"
+    ],
+  ];
 
   @override
   void initState() {
     super.initState();
-    // _controller.play();
   }
 
-  void _initializeVideo() {
+  void _initializeVideo(String url) {
+    _controller = VideoPlayerController.network(url);
+    _controller!.initialize();
     setState(() {
-      _controller = VideoPlayerController.network(
-          // "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_2MB.mp4");
-          // "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4");
-          // "https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_2MB.mp4");
-          // "https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_30MB.mp4");
-          // "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4");
-          "https://multiplatform-f.akamaihd.net/i/multi/april11/sintel/sintel-hd_,512x288_450_b,640x360_700_b,768x432_1000_b,1024x576_1400_m,.mp4.csmil/master.m3u8");
-      _controller!.initialize();
       _videoDisposed = false;
     });
     Navigator.of(_scaffoldKey.currentContext!).pop();
@@ -42,9 +62,9 @@ class _MyAppState extends State<MyApp> {
 
   void _disposeVideo() {
     setState(() {
-      _controller?.dispose();
       _videoDisposed = true;
     });
+    _controller?.dispose();
     Navigator.of(_scaffoldKey.currentContext!).pop();
   }
 
@@ -63,13 +83,20 @@ class _MyAppState extends State<MyApp> {
         ),
         drawer: Drawer(
           child: ListView(
-            children: [
-              ListTile(
-                title:
-                    Text(_videoDisposed ? "Initialize video" : "Dispose video"),
-                onTap: _videoDisposed ? _initializeVideo : _disposeVideo,
-              ),
-            ],
+            children: _videoDisposed
+                ? [
+                    for (final thing in videos)
+                      ListTile(
+                        title: Text("Initialize: ${thing[0]}"),
+                        onTap: () => _initializeVideo(thing[1]),
+                      ),
+                  ]
+                : [
+                    ListTile(
+                      title: Text("Dispose video"),
+                      onTap: _disposeVideo,
+                    ),
+                  ],
           ),
         ),
       ),

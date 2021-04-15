@@ -6,9 +6,6 @@
 // This must be included before many other Windows headers.
 #include <windows.h>
 
-// For getPlatformVersion; remove unless needed for your plugin implementation.
-#include <VersionHelpers.h>
-
 #include <flutter/basic_message_channel.h>
 #include <flutter/event_channel.h>
 #include <flutter/method_channel.h>
@@ -35,13 +32,8 @@ public:
   virtual ~VideoPlayerWindowsPlugin();
 
 private:
-  // // Called when a method is called on this plugin's channel from Dart.
-  // void HandleMethodCall(
-  //     const flutter::MethodCall<flutter::EncodableValue> &method_call,
-  //     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   std::vector<std::unique_ptr<flutter::BasicMessageChannel<flutter::EncodableValue>>> channels;
   std::unordered_map<int64_t, std::unique_ptr<VideoPlayerTexture>> textures;
-  // int _textureIdCounter = 0;
   flutter::PluginRegistrarWindows *registrar;
 
   void SetupMethods(flutter::BinaryMessenger *messenger);
@@ -89,20 +81,12 @@ void VideoPlayerWindowsPlugin::InitMethod(flutter::BinaryMessenger *messenger,
       messenger, channel_name, &flutter::StandardMessageCodec::GetInstance());
   channel->SetMessageHandler(method);
   channels.emplace_back(std::move(channel));
-  // auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(messenger,
-  // channel_name, &flutter::StandardMethodCodec::GetInstance());
-  // channel->SetMethodCallHandler(method);
 }
 
 void VideoPlayerWindowsPlugin::HandleInitialize(
     const flutter::EncodableValue &message,
     const flutter::MessageReply<flutter::EncodableValue> &reply) {
-  std::cout << "Debug print of init value" << std::endl;
-  DebugPrintValue(message);
-  std::cout << "Initialized" << std::endl;
-  // std::flush(std::cout);
   reply(WrapResult(std::move(flutter::EncodableValue(std::monostate()))));
-  // result->Success(flutter::EncodableValue(std::monostate()));
 }
 
 void VideoPlayerWindowsPlugin::HandleCreate(
@@ -111,16 +95,6 @@ void VideoPlayerWindowsPlugin::HandleCreate(
   std::cout << "Debug print of message:" << std::endl;
   DebugPrintValue(message);
   CreateMessage cm(message);
-  // if (!cm.uri.has_value()) {
-  //   std::cout << "No value for URI!" << std::endl;
-  //   reply(WrapError(std::move(flutter::EncodableValue("No URI"))));
-  //   return;
-  //   // std::cout << "cm uri = " << *cm.uri << std::endl;
-  // }
-  // std::cout << "TODO: handle create" << std::endl;
-  // result with texture id 5
-  // TextureMessage tm;
-  // tm.textureId = 5;
   std::unique_ptr<VideoPlayerTexture> tex = std::make_unique<VideoPlayerTexture>(*cm.uri);
   int64_t tid = tex->RegisterWithTextureRegistrar(registrar->texture_registrar());
   tex->SetupEventChannel(registrar->messenger());
@@ -128,8 +102,6 @@ void VideoPlayerWindowsPlugin::HandleCreate(
   TextureMessage tm;
   tm.textureId = tid;
   reply(WrapResult(tm.toEncodable()));
-  // reply(WrapResult(std::move(tm.toEncodable())));
-  // result->Success(flutter::EncodableValue(std::monostate()));
 }
 
 void VideoPlayerWindowsPlugin::HandleDispose(
@@ -152,7 +124,6 @@ void VideoPlayerWindowsPlugin::HandlePosition(
   PositionMessage pm;
   pm.textureId = tm.textureId;
   pm.position = tex->GetPosition();
-  // std::cerr << "Handling position method, position=" << pm.position << "ms" << std::endl;
   reply(WrapResult(pm.toEncodable()));
 }
 
@@ -167,14 +138,8 @@ void VideoPlayerWindowsPlugin::RegisterWithRegistrar(flutter::PluginRegistrarWin
   auto plugin = std::make_unique<VideoPlayerWindowsPlugin>(registrar);
   auto messenger = registrar->messenger();
   plugin->SetupMethods(messenger);
-  // plugin->InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.initialize",
-  // plugin->HandleInitialize); plugin->InitMethod(messenger,
-  // "dev.flutter.pigeon.VideoPlayerApi.create", plugin->HandleCreate);
-
   registrar->AddPlugin(std::move(plugin));
 }
-
-// VideoPlayerWindowsPlugin::VideoPlayerWindowsPlugin() {}
 
 VideoPlayerWindowsPlugin::~VideoPlayerWindowsPlugin() {}
 } // namespace

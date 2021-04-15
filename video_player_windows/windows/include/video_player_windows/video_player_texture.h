@@ -28,13 +28,10 @@ extern "C" {
 
 class VideoPlayerTexture {
 public:
-  // VideoPlayerTexture() = delete;
-  // VideoPlayerTexture();
   VideoPlayerTexture(const std::string &uri);
   VideoPlayerTexture(const VideoPlayerTexture &) = default;
   VideoPlayerTexture(VideoPlayerTexture &&) = default;
   ~VideoPlayerTexture();
-  // operator=(const VideoPlayerTexture &) = default;
 
   // Returns the texture ID
   int64_t RegisterWithTextureRegistrar(flutter::TextureRegistrar *registrar);
@@ -80,7 +77,6 @@ private:
   std::chrono::time_point<std::chrono::system_clock> playback_start;
 
   FlutterDesktopPixelBuffer fl_buffer;
-  // flutter::PixelBufferTexture tex;
   std::unique_ptr<flutter::TextureVariant> texture_;
   std::unique_ptr<VideoPlayerStreamHandler> fl_stream_handler;
   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> fl_event_channel;

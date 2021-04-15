@@ -34,9 +34,7 @@ flutter::EncodableValue WrapResult(flutter::EncodableValue res) {
   flutter::EncodableMap m;
   m[flutter::EncodableValue("result")] = std::move(res);
   m[flutter::EncodableValue("error")] = flutter::EncodableValue(std::monostate());
-  // std::cout << "Wrapped value:" << std::endl;
   flutter::EncodableValue v = flutter::EncodableValue(std::move(m));
-  // DebugPrintValue(v);
   return v;
 }
 
@@ -44,8 +42,6 @@ flutter::EncodableValue WrapError(flutter::EncodableValue err) {
   flutter::EncodableMap m;
   m[flutter::EncodableValue("result")] = flutter::EncodableValue(std::monostate());
   m[flutter::EncodableValue("error")] = std::move(err);
-  // std::cout << "Wrapped value:" << std::endl;
   flutter::EncodableValue v = flutter::EncodableValue(std::move(m));
-  // DebugPrintValue(v);
   return v;
 }

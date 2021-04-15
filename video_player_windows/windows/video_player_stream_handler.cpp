@@ -8,8 +8,6 @@ flutter::EncodableValue VideoPlayerStreamHandler::ConstructInitialized() {
   flutter::EncodableMap m;
   // Safe to read our ptr since the video is always initialized prior
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("initialized");
-  // AVStream *stream = texture->cFormatCtx->streams[texture->vStream];
-  // int64_t duration = stream->nb_frames * 1000 / texture->fps;
   int64_t duration = texture->cFormatCtx->duration * 1000 / AV_TIME_BASE;
   int width = texture->vCodecCtx->width;
   int height = texture->vCodecCtx->height;
