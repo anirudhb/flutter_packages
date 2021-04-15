@@ -26,7 +26,7 @@
                 "${workspaceFolder}/**",
                 "C:/Users/anirudh/Desktop/dev/flutter/bin/cache/artifacts/engine/windows-x64/cpp_client_wrapper",
                 "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/include",
-                "C:/Users/anirudh/Desktop/Git/video_player_windows/windows/libao-cmake/include"
+                "C:/Users/anirudh/Desktop/Git/flutter_packages/video_player_windows/windows/libao-cmake/include"
             ],
             "defines": [
                 "_DEBUG",

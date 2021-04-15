@@ -68,6 +68,7 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
     std::cerr << "No decoder found for codec ID " << vCodecCtxOrig->codec_id << "!" << std::endl;
     std::exit(1);
   }
+  std::cerr << "Video codec name = " << avcodec_get_name(vCodec->id) << std::endl;
 
   vCodecCtx = avcodec_alloc_context3(vCodec);
   avcodec_copy_context(vCodecCtx, vCodecCtxOrig);
@@ -152,11 +153,12 @@ void VideoPlayerTexture::DecodeThreadProc() {
   size_t max_queue_items = 209715200 / (vCodecCtx->width * vCodecCtx->height * 4);
   std::cerr << "Max queue items: " << max_queue_items << std::endl;
   while (!stopped) {
-    bool done;
     std::optional<VideoFrame> frame;
     std::optional<AudioFrame> adFrame;
     while (!frame.has_value() && !adFrame.has_value()) {
       std::tie(done, frame, adFrame) = ReadFrame();
+      if (done)
+        goto done;
     }
     if (adFrame.has_value()) {
       m_audio_frames.lock();
@@ -245,7 +247,7 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (done) {
         goto done;
       }
-      std::cerr << "Waiting for frame..." << std::endl;
+      // std::cerr << "Waiting for frame..." << std::endl;
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
     }
     // We have a frame...
