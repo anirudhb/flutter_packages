@@ -1,0 +1,45 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.18362.0",
+            "compilerPath": "D:/Programs/VisualStudio/2019/Community/VC/Tools/MSVC/14.28.29333/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        // {
+        //     "name": "Flutter",
+        //     "configurationProvider": "ms-vscode.cmake-tools"
+        // }
+        {
+            "name": "Flutter",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/Users/anirudh/Desktop/dev/flutter/bin/cache/artifacts/engine/windows-x64/cpp_client_wrapper",
+                "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/include",
+                "C:/Users/anirudh/Desktop/Git/video_player_windows/windows/libao-cmake/include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.18362.0",
+            "compilerPath": "D:/Programs/VisualStudio/2019/Community/VC/Tools/MSVC/14.28.29333/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+            // "configurationProvider": "ms-vscode.cmake-tools"
+        }
+    ],
+    "version": 4
+}
