@@ -1,0 +1,3 @@
+[submodule "video_player_windows/windows/libao-cmake"]
+	path = video_player_windows/windows/libao-cmake
+	url = https://github.com/aarcangeli/libao-cmake
