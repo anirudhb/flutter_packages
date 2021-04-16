@@ -53,6 +53,8 @@ private:
                    const flutter::MessageReply<flutter::EncodableValue> &reply);
   void HandleSeek(const flutter::EncodableValue &message,
                   const flutter::MessageReply<flutter::EncodableValue> &reply);
+  void HandleSetVolume(const flutter::EncodableValue &message,
+                       const flutter::MessageReply<flutter::EncodableValue> &reply);
   void TextureOpStub(const flutter::EncodableValue &message,
                      const flutter::MessageReply<flutter::EncodableValue> &reply);
 };
@@ -73,7 +75,7 @@ void VideoPlayerWindowsPlugin::SetupMethods(flutter::BinaryMessenger *messenger)
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setPlaybackSpeed",
              std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setVolume",
-             std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
+             std::bind(&VideoPlayerWindowsPlugin::HandleSetVolume, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setLooping",
              std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.position",
@@ -171,6 +173,20 @@ void VideoPlayerWindowsPlugin::HandleSeek(
   }
   std::unique_ptr<VideoPlayerTexture> &tex = textures[pm.textureId];
   tex->Seek(pm.position);
+  reply(WrapResult(std::monostate()));
+}
+
+void VideoPlayerWindowsPlugin::HandleSetVolume(
+    const flutter::EncodableValue &message,
+    const flutter::MessageReply<flutter::EncodableValue> &reply) {
+  VolumeMessage vm(message);
+  if (textures.find(vm.textureId) == textures.end()) {
+    reply(WrapError(flutter::EncodableValue("Texture not found")));
+    return;
+  }
+  std::unique_ptr<VideoPlayerTexture> &tex = textures[vm.textureId];
+  tex->SetVolume(vm.volume);
+  std::cerr << "Volume set to " << vm.volume << std::endl;
   reply(WrapResult(std::monostate()));
 }
 

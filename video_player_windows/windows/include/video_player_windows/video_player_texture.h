@@ -1,8 +1,8 @@
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <optional>
-#include <queue>
 #include <string>
 #include <thread>
 
@@ -44,6 +44,7 @@ public:
   void Play();
   void Pause();
   void Seek(int64_t millis);
+  void SetVolume(double volume);
 
 private:
   std::tuple<bool, std::optional<VideoFrame>, std::optional<AudioFrame>> ReadFrame();
@@ -88,14 +89,15 @@ private:
   std::atomic<bool> done;
   std::atomic<bool> stopped;
   std::atomic<bool> paused;
+  std::atomic<double> volume = 1;
   flutter::TextureRegistrar *registrar;
   int64_t tid;
-  std::queue<VideoFrame> video_frames;
+  std::deque<VideoFrame> video_frames;
   std::mutex m_video_frames;
   VideoFrame current_video_frame = VideoFrame();
   // Used by renderer
   VideoFrame current_video_frame2 = VideoFrame();
-  std::queue<AudioFrame> audio_frames;
+  std::deque<AudioFrame> audio_frames;
   std::mutex m_audio_frames;
   AudioFrame current_audio_frame;
   std::thread decodeThread;

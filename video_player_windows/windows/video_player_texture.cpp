@@ -172,7 +172,7 @@ void VideoPlayerTexture::DecodeThreadProc() {
           goto done;
         std::this_thread::sleep_for(std::chrono::microseconds(100));
       }
-      audio_frames.emplace(std::move(*adFrame));
+      audio_frames.emplace_back(std::move(*adFrame));
       m_audio_frames.unlock();
     }
     if (frame.has_value()) {
@@ -188,7 +188,7 @@ void VideoPlayerTexture::DecodeThreadProc() {
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       }
       // Add frame
-      video_frames.emplace(std::move(*frame));
+      video_frames.emplace_back(std::move(*frame));
       m_video_frames.unlock();
     }
   }
@@ -220,7 +220,7 @@ void VideoPlayerTexture::AudioThreadProc() {
       m_audio_frames.lock();
       if (!audio_frames.empty()) {
         frame = std::move(audio_frames.front());
-        audio_frames.pop();
+        audio_frames.pop_front();
         m_audio_frames.unlock();
         break;
       }
@@ -259,7 +259,7 @@ void VideoPlayerTexture::FrameThreadProc() {
       m_video_frames.lock();
       if (!video_frames.empty()) {
         frame = std::move(video_frames.front());
-        video_frames.pop();
+        video_frames.pop_front();
         m_video_frames.unlock();
         break;
       }
@@ -331,7 +331,15 @@ VideoPlayerTexture::ReadFrame() {
         int out_linesize;
         av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
         int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
-        adFrame = AudioFrame(out, ret * aCodecCtx->channels, aFrame->pkt_pts);
+        int bufsize = ret * aCodecCtx->channels;
+        double volume2 = volume;
+        if (volume2 != 1) {
+          // scale
+          for (int i = 0; i < bufsize; i++) {
+            out[i] = static_cast<double>(out[i]) * volume;
+          }
+        }
+        adFrame = AudioFrame(out, bufsize, aFrame->pkt_pts);
       }
     }
     av_free_packet(&packet);
@@ -384,12 +392,12 @@ void VideoPlayerTexture::Seek(int64_t millis) {
     avcodec_flush_buffers(aCodecCtx);
     // Frames are stale
     while (!audio_frames.empty())
-      audio_frames.pop();
+      audio_frames.pop_front();
   }
   avcodec_flush_buffers(vCodecCtx);
   // Frames are stale
   while (!video_frames.empty())
-    video_frames.pop();
+    video_frames.pop_front();
   current_audio_frame.pts = target_pts;
   // Read frames until we get one
   // so that the user does not have a bad experience
@@ -414,6 +422,22 @@ void VideoPlayerTexture::Seek(int64_t millis) {
   m_audio_frames.unlock();
   if (wasPlaying)
     Play();
+}
+void VideoPlayerTexture::SetVolume(double volume2) {
+  // Rescale existing frames
+  volume = volume2;
+  m_audio_frames.lock();
+  // try to also rescale current frame
+  // not perfect!
+  for (auto it = current_audio_frame.data.begin(); it != current_audio_frame.data.end(); it++) {
+    *it = static_cast<double>(*it) * volume2;
+  }
+  for (auto &frame : audio_frames) {
+    for (auto it = frame.data.begin(); it != frame.data.end(); it++) {
+      *it = static_cast<double>(*it) * volume2;
+    }
+  }
+  m_audio_frames.unlock();
 }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {

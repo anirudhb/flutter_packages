@@ -33,6 +33,26 @@ flutter::EncodableValue PositionMessage::toEncodable() {
   return flutter::EncodableValue(m);
 }
 
+const auto kVolumeKey = flutter::EncodableValue("volume"s);
+
+VolumeMessage::VolumeMessage(const flutter::EncodableValue &value) {
+  if (!std::holds_alternative<flutter::EncodableMap>(value))
+    return;
+  flutter::EncodableMap map = std::get<flutter::EncodableMap>(value);
+  if (map.find(kTextureIdKey) != map.end()) {
+    flutter::EncodableValue thing = map[kTextureIdKey];
+    if (std::holds_alternative<int32_t>(thing))
+      textureId = std::get<int32_t>(thing);
+    if (std::holds_alternative<int64_t>(thing))
+      textureId = std::get<int64_t>(thing);
+  }
+  if (map.find(kVolumeKey) != map.end()) {
+    flutter::EncodableValue thing = map[kVolumeKey];
+    if (std::holds_alternative<double>(thing))
+      volume = std::get<double>(thing);
+  }
+}
+
 TextureMessage::TextureMessage(const flutter::EncodableValue &value) {
   if (!std::holds_alternative<flutter::EncodableMap>(value))
     return;

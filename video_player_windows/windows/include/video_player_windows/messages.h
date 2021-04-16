@@ -14,6 +14,14 @@ struct PositionMessage {
   flutter::EncodableValue toEncodable();
 };
 
+struct VolumeMessage {
+  int64_t textureId;
+  double volume = 1;
+
+  VolumeMessage() = default;
+  VolumeMessage(const flutter::EncodableValue &);
+};
+
 struct TextureMessage {
   int64_t textureId;
 

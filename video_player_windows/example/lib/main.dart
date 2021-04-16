@@ -119,6 +119,22 @@ class _MyAppState extends State<MyApp> {
                       onTap: _seekTo30Seconds,
                     ),
                     ListTile(
+                      title: Text("Set volume to 0.2"),
+                      onTap: () => _controller?.setVolume(0.2),
+                    ),
+                    ListTile(
+                      title: Text("Set volume to 0.5"),
+                      onTap: () => _controller?.setVolume(0.5),
+                    ),
+                    ListTile(
+                      title: Text("Set volume to 1"),
+                      onTap: () => _controller?.setVolume(1),
+                    ),
+                    ListTile(
+                      title: Text("Set volume to 1.5"),
+                      onTap: () => _controller?.setVolume(1.5),
+                    ),
+                    ListTile(
                       title: Text("Dispose video"),
                       onTap: _disposeVideo,
                     ),
