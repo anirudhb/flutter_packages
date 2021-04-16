@@ -54,6 +54,8 @@ private:
   void AudioThreadProc();
 
   void SendTimeUpdate(int64_t secs);
+  void SendBufferingStart();
+  void SendBufferingEnd();
   void SendCompleted();
 
   AVFormatContext *cFormatCtx = NULL;

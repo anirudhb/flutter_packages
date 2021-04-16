@@ -187,6 +187,7 @@ void VideoPlayerTexture::DecodeThreadProc() {
           goto done;
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       }
+      SendTimeUpdate(frame->frame_number * 1000 / fps);
       // Add frame
       video_frames.emplace_back(std::move(*frame));
       m_video_frames.unlock();
@@ -268,16 +269,14 @@ void VideoPlayerTexture::FrameThreadProc() {
         goto done;
       }
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
+      SendBufferingStart();
     }
+    SendBufferingEnd();
     // We have a frame...
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(pts_size_micros * frame.pts);
     if (now < target) {
       std::this_thread::sleep_for(target - now);
-    }
-    if (frame.frame_number % fps == 0) {
-      int64_t time = frame.frame_number / fps;
-      SendTimeUpdate(time);
     }
     // force destruction
     current_video_frame = VideoFrame();
@@ -350,20 +349,38 @@ VideoPlayerTexture::ReadFrame() {
   return std::make_tuple(done, frame, adFrame);
 }
 
-void VideoPlayerTexture::SendTimeUpdate(int64_t secs) {
+void VideoPlayerTexture::SendTimeUpdate(int64_t millis) {
   if (!fl_event_sink)
     return;
   flutter::EncodableMap m;
-  std::cerr << "Sending time update secs=" << secs << std::endl;
+  std::cerr << "Sending time update millis=" << millis << std::endl;
   // XXX: send buffering update
   flutter::EncodableList values = {
       flutter::EncodableValue(flutter::EncodableList{
           flutter::EncodableValue(0),
-          flutter::EncodableValue(secs * 1000),
+          flutter::EncodableValue(millis),
       }),
   };
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingUpdate");
   m[flutter::EncodableValue("values")] = flutter::EncodableValue(values);
+  fl_event_sink->Success(flutter::EncodableValue(m));
+}
+
+void VideoPlayerTexture::SendBufferingStart() {
+  if (!fl_event_sink)
+    return;
+  std::cerr << "Sending buffering start event" << std::endl;
+  flutter::EncodableMap m;
+  m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingStart");
+  fl_event_sink->Success(flutter::EncodableValue(m));
+}
+
+void VideoPlayerTexture::SendBufferingEnd() {
+  if (!fl_event_sink)
+    return;
+  std::cerr << "Sending buffering end event" << std::endl;
+  flutter::EncodableMap m;
+  m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingEnd");
   fl_event_sink->Success(flutter::EncodableValue(m));
 }
 
