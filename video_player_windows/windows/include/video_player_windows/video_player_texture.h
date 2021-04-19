@@ -45,6 +45,7 @@ public:
   void Pause();
   void Seek(int64_t millis);
   void SetVolume(double volume);
+  void SetSpeed(double speed);
 
 private:
   std::tuple<bool, std::optional<VideoFrame>, std::optional<AudioFrame>> ReadFrame();
@@ -77,8 +78,8 @@ private:
   struct SwrContext *swrCtx = NULL;
   int64_t current_pts = 0;
   int64_t target_pts = 0;
-  int64_t pts_size_micros = 0;
-  int64_t audio_size_micros = 0;
+  std::atomic<int64_t> pts_size_micros = 0;
+  std::atomic<int64_t> audio_size_micros = 0;
   int64_t fps = 1;
   std::chrono::time_point<std::chrono::system_clock> playback_start;
 
@@ -92,6 +93,7 @@ private:
   std::atomic<bool> stopped;
   std::atomic<bool> paused;
   std::atomic<double> volume = 1;
+  std::atomic<double> speed = 1;
   flutter::TextureRegistrar *registrar;
   int64_t tid;
   std::deque<VideoFrame> video_frames;

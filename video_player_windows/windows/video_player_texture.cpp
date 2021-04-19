@@ -207,8 +207,6 @@ void VideoPlayerTexture::AudioThreadProc() {
   format.rate = 44100;
   ao_device *device = ao_open_live(ao_default_driver_id(), &format, NULL);
   // frame thread should set playback_start
-  // determine proper pts size
-  int64_t apts_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000;
   while (!stopped) {
     // Check if paused
     if (paused) {
@@ -229,16 +227,29 @@ void VideoPlayerTexture::AudioThreadProc() {
       if (done || stopped) {
         goto done;
       }
-      std::cerr << "Waiting for audio frame..." << std::endl;
+      // std::cerr << "Waiting for audio frame..." << std::endl;
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
     }
     auto now = std::chrono::system_clock::now();
-    auto target = playback_start + std::chrono::microseconds(apts_size_micros * frame.pts);
+    auto target = playback_start + std::chrono::microseconds(audio_size_micros * frame.pts);
     if (now < target) {
       std::this_thread::sleep_for(target - now);
     }
-    // Present the frame
-    ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
+    if (speed != 1) {
+      // transform data
+      AVRational speed_r = av_d2q(speed, 100);
+      std::vector<uint8_t> new_data;
+      for (int i = 0; i < frame.data.size(); i += speed_r.den) {
+        uint8_t avg = 0;
+        for (int j = 0; j < speed_r.den; j++)
+          avg += frame.data[i + j];
+        new_data.push_back(avg / speed_r.den);
+      }
+      ao_play(device, reinterpret_cast<char *>(new_data.data()), new_data.size());
+    } else {
+      // Present the frame
+      ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
+    }
   }
 done:
   ao_close(device);
@@ -256,6 +267,7 @@ void VideoPlayerTexture::FrameThreadProc() {
                        std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
     }
     VideoFrame frame;
+    bool didBuffer = false;
     while (true) {
       m_video_frames.lock();
       if (!video_frames.empty()) {
@@ -269,9 +281,12 @@ void VideoPlayerTexture::FrameThreadProc() {
         goto done;
       }
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
-      SendBufferingStart();
+      if (!didBuffer)
+        SendBufferingStart();
+      didBuffer = true;
     }
-    SendBufferingEnd();
+    if (didBuffer)
+      SendBufferingEnd();
     // We have a frame...
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(pts_size_micros * frame.pts);
@@ -353,7 +368,7 @@ void VideoPlayerTexture::SendTimeUpdate(int64_t millis) {
   if (!fl_event_sink)
     return;
   flutter::EncodableMap m;
-  std::cerr << "Sending time update millis=" << millis << std::endl;
+  // std::cerr << "Sending time update millis=" << millis << std::endl;
   // XXX: send buffering update
   flutter::EncodableList values = {
       flutter::EncodableValue(flutter::EncodableList{
@@ -455,6 +470,17 @@ void VideoPlayerTexture::SetVolume(double volume2) {
     }
   }
   m_audio_frames.unlock();
+}
+void VideoPlayerTexture::SetSpeed(double speed2) {
+  bool wasPaused = paused;
+  Pause();
+  speed = speed2;
+  pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
+  if (aStream != -1)
+    audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000 / speed2;
+  // Play will rescale the playback base
+  if (!wasPaused)
+    Play();
 }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {

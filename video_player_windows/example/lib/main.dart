@@ -135,6 +135,26 @@ class _MyAppState extends State<MyApp> {
                       onTap: () => _controller?.setVolume(1.5),
                     ),
                     ListTile(
+                      title: Text("Set speed to 0.2"),
+                      onTap: () => _controller?.setPlaybackSpeed(0.2),
+                    ),
+                    ListTile(
+                      title: Text("Set speed to 0.5"),
+                      onTap: () => _controller?.setPlaybackSpeed(0.5),
+                    ),
+                    ListTile(
+                      title: Text("Set speed to 1"),
+                      onTap: () => _controller?.setPlaybackSpeed(1),
+                    ),
+                    ListTile(
+                      title: Text("Set speed to 1.5"),
+                      onTap: () => _controller?.setPlaybackSpeed(1.5),
+                    ),
+                    ListTile(
+                      title: Text("Set speed to 2"),
+                      onTap: () => _controller?.setPlaybackSpeed(2),
+                    ),
+                    ListTile(
                       title: Text("Dispose video"),
                       onTap: _disposeVideo,
                     ),
