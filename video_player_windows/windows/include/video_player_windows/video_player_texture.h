@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 #include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
@@ -54,6 +55,11 @@ private:
   void FrameThreadProc();
   void AudioThreadProc();
 
+  // Initialize the filter graph
+  // with given speed and volume
+  // if speed is zero, speed is not included in graph (ditto volume)
+  void InitFilterGraph(double speed = 0, double volume = 0);
+
   void SendTimeUpdate(int64_t secs);
   void SendBufferingStart();
   void SendBufferingEnd();
@@ -62,6 +68,9 @@ private:
   AVFormatContext *cFormatCtx = NULL;
   AVCodecContext *vCodecCtx = NULL;
   AVCodecContext *vCodecCtxOrig = NULL;
+  AVFilterContext *aSinkCtx = NULL;
+  AVFilterContext *aSrcCtx = NULL;
+  AVFilterGraph *aFilterGraph = NULL;
   AVCodecContext *aCodecCtx = NULL;
   AVCodec *vCodec = NULL;
   int vStream;
@@ -69,6 +78,7 @@ private:
   AVFrame *vFrame = NULL;
   AVFrame *vFrameRGB = NULL;
   AVFrame *aFrame = NULL;
+  AVFrame *aFilterFrame = NULL;
   AVPacket packet;
   int frameFinished;
   uint8_t *buffer = NULL;

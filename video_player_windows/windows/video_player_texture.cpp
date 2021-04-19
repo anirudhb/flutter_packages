@@ -7,7 +7,26 @@
 
 #include <flutter/standard_method_codec.h>
 
+extern "C" {
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavutil/opt.h>
+}
+
 #include <ao.h>
+
+static void check_error_or_die2(const char *file, int line, int e) {
+  if (e < 0) {
+    // error
+    char buf[AV_ERROR_MAX_STRING_SIZE];
+    av_make_error_string(buf, AV_ERROR_MAX_STRING_SIZE, -e);
+    std::cerr << std::endl << "[" << file << ":" << line << "] av error: " << buf << std::endl;
+  }
+}
+
+#define check_error_or_die(e) check_error_or_die2(__FILE__, __LINE__, e)
+
+static const char *filter_descr = "aresample=44100,aformat=sample_fmts=u8:channel_layouts=stereo";
 
 VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
   av_log_set_level(AV_LOG_VERBOSE);
@@ -48,10 +67,13 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
     // audio setup
     aCodecCtx = cFormatCtx->streams[aStream]->codec;
     aFrame = av_frame_alloc();
+    aFilterFrame = av_frame_alloc();
 
     aCodecCtx->codec = avcodec_find_decoder(aCodecCtx->codec_id);
     avcodec_open2(aCodecCtx, aCodecCtx->codec, NULL);
     audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000;
+
+    InitFilterGraph();
 
     swrCtx = swr_alloc_set_opts(NULL, aCodecCtx->channel_layout, AV_SAMPLE_FMT_U8,
                                 aCodecCtx->sample_rate, aCodecCtx->channel_layout,
@@ -86,6 +108,70 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
                           vCodecCtx->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, NULL, NULL, NULL);
 }
 
+void VideoPlayerTexture::InitFilterGraph(double speed3, double volume3) {
+  // setup filter graph
+  char args[512];
+  const AVFilter *abuffersrc = avfilter_get_by_name("abuffer");
+  const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
+  AVFilterInOut *outputs = avfilter_inout_alloc();
+  AVFilterInOut *inputs = avfilter_inout_alloc();
+  static const enum AVSampleFormat out_sample_fmts[] = {AV_SAMPLE_FMT_U8,
+                                                        static_cast<enum AVSampleFormat>(-1)};
+  static const int64_t out_channel_layouts[] = {AV_CH_LAYOUT_STEREO, -1};
+  static const int out_sample_rates[] = {44100, -1};
+  const AVFilterLink *outlink;
+  AVRational aTimeBase = cFormatCtx->streams[aStream]->time_base;
+
+  aFilterGraph = avfilter_graph_alloc();
+  if (!aCodecCtx->channel_layout) {
+    aCodecCtx->channel_layout = av_get_default_channel_layout(aCodecCtx->channels);
+  }
+  snprintf(args, sizeof(args), "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%llx",
+           aTimeBase.num, aTimeBase.den, aCodecCtx->sample_rate,
+           av_get_sample_fmt_name(aCodecCtx->sample_fmt), aCodecCtx->channel_layout);
+  std::cerr << "args=" << args << std::endl;
+  check_error_or_die(
+      avfilter_graph_create_filter(&aSrcCtx, abuffersrc, "in", args, NULL, aFilterGraph));
+  check_error_or_die(
+      avfilter_graph_create_filter(&aSinkCtx, abuffersink, "out", NULL, NULL, aFilterGraph));
+  check_error_or_die(
+      av_opt_set_int_list(aSinkCtx, "sample_fmts", out_sample_fmts, -1, AV_OPT_SEARCH_CHILDREN));
+  check_error_or_die(av_opt_set_int_list(aSinkCtx, "channel_layouts", out_channel_layouts, -1,
+                                         AV_OPT_SEARCH_CHILDREN));
+  check_error_or_die(
+      av_opt_set_int_list(aSinkCtx, "sample_rates", out_sample_rates, -1, AV_OPT_SEARCH_CHILDREN));
+  outputs->name = av_strdup("in");
+  outputs->filter_ctx = aSrcCtx;
+  outputs->pad_idx = 0;
+  outputs->next = NULL;
+
+  inputs->name = av_strdup("out");
+  inputs->filter_ctx = aSinkCtx;
+  inputs->pad_idx = 0;
+  inputs->next = NULL;
+
+  const char *desc_ptr = filter_descr;
+  if ((speed3 != 0 && speed3 != 1) || (volume3 != 0 && volume3 != 1)) {
+    snprintf(args, sizeof(args), "atempo=%.3f,volume=%.3f,%s", speed3 == 0 ? 1 : speed3,
+             volume3 == 0 ? 1 : volume3, filter_descr);
+    desc_ptr = args;
+  }
+  std::cerr << "using filter description= " << args << std::endl;
+
+  check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, desc_ptr, &inputs, &outputs, NULL));
+  check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
+
+  outlink = aSinkCtx->inputs[0];
+  av_get_channel_layout_string(args, sizeof(args), -1, outlink->channel_layout);
+  std::cout << "output srate=" << outlink->sample_rate << "hz fmt="
+            << av_x_if_null(av_get_sample_fmt_name(static_cast<AVSampleFormat>(outlink->format)),
+                            "?")
+            << " chlayout=" << args << std::endl;
+
+  avfilter_inout_free(&inputs);
+  avfilter_inout_free(&outputs);
+}
+
 VideoPlayerTexture::~VideoPlayerTexture() {
   stopped = true;
   if (decodeThread.joinable()) {
@@ -99,6 +185,11 @@ VideoPlayerTexture::~VideoPlayerTexture() {
     registrar->UnregisterTexture(tid);
   }
   av_free(buffer);
+  if (aStream != -1) {
+    av_frame_free(&aFrame);
+    av_frame_free(&aFilterFrame);
+    // TODO: free filter graph
+  }
   av_frame_free(&vFrameRGB);
   av_frame_free(&vFrame);
   avcodec_close(vCodecCtx);
@@ -235,7 +326,8 @@ void VideoPlayerTexture::AudioThreadProc() {
     if (now < target) {
       std::this_thread::sleep_for(target - now);
     }
-    if (speed != 1) {
+    // if (speed != 1) {
+    if (0) {
       // transform data
       AVRational speed_r = av_d2q(speed, 100);
       std::vector<uint8_t> new_data;
@@ -340,20 +432,29 @@ VideoPlayerTexture::ReadFrame() {
       }
       e = avcodec_receive_frame(aCodecCtx, aFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
-        const uint8_t **in = const_cast<const uint8_t **>(aFrame->extended_data);
-        uint8_t *out = NULL;
-        int out_linesize;
-        av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
-        int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
-        int bufsize = ret * aCodecCtx->channels;
-        double volume2 = volume;
-        if (volume2 != 1) {
-          // scale
-          for (int i = 0; i < bufsize; i++) {
-            out[i] = static_cast<double>(out[i]) * volume;
-          }
+        av_buffersrc_add_frame(aSrcCtx, aFrame);
+        e = av_buffersink_get_frame(aSinkCtx, aFilterFrame);
+        if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
+          int bufsize = aFilterFrame->nb_samples *
+                        av_get_channel_layout_nb_channels(aFilterFrame->channel_layout);
+          adFrame = AudioFrame(reinterpret_cast<uint8_t *>(aFilterFrame->data[0]), bufsize,
+                               aFilterFrame->pkt_pts);
+          av_frame_unref(aFilterFrame);
         }
-        adFrame = AudioFrame(out, bufsize, aFrame->pkt_pts);
+        // const uint8_t **in = const_cast<const uint8_t **>(aFrame->extended_data);
+        // uint8_t *out = NULL;
+        // int out_linesize;
+        // av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
+        // int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
+        // int bufsize = ret * aCodecCtx->channels;
+        // double volume2 = volume;
+        // if (volume2 != 1) {
+        //   // scale
+        //   for (int i = 0; i < bufsize; i++) {
+        //     out[i] = static_cast<double>(out[i]) * volume;
+        //   }
+        // }
+        // adFrame = AudioFrame(out, bufsize, aFrame->pkt_pts);
       }
     }
     av_free_packet(&packet);
@@ -456,28 +557,45 @@ void VideoPlayerTexture::Seek(int64_t millis) {
     Play();
 }
 void VideoPlayerTexture::SetVolume(double volume2) {
+  bool wasPaused = paused;
+  Pause();
   // Rescale existing frames
   volume = volume2;
-  m_audio_frames.lock();
-  // try to also rescale current frame
-  // not perfect!
-  for (auto it = current_audio_frame.data.begin(); it != current_audio_frame.data.end(); it++) {
-    *it = static_cast<double>(*it) * volume2;
-  }
-  for (auto &frame : audio_frames) {
-    for (auto it = frame.data.begin(); it != frame.data.end(); it++) {
-      *it = static_cast<double>(*it) * volume2;
-    }
-  }
-  m_audio_frames.unlock();
+  // m_audio_frames.lock();
+  // Reinitialize filter
+  InitFilterGraph(speed, volume2);
+  // Audio frames are stale
+  Seek(GetPosition());
+  // // try to also rescale current frame
+  // // not perfect!
+  // for (auto it = current_audio_frame.data.begin(); it != current_audio_frame.data.end(); it++) {
+  //   *it = static_cast<double>(*it) * volume2;
+  // }
+  // for (auto &frame : audio_frames) {
+  //   for (auto it = frame.data.begin(); it != frame.data.end(); it++) {
+  //     *it = static_cast<double>(*it) * volume2;
+  //   }
+  // }
+  // m_audio_frames.unlock();
+  if (!wasPaused)
+    Play();
 }
 void VideoPlayerTexture::SetSpeed(double speed2) {
   bool wasPaused = paused;
   Pause();
   speed = speed2;
   pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
-  if (aStream != -1)
-    audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000 / speed2;
+  // if (aStream != -1)
+  //   audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000 / speed2;
+  // Reinitialize filter
+  // char args[512];
+  // snprintf(args, sizeof(args), "%s,atempo=%.3f", filter_descr, speed2);
+  // check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, args, &aInputs, &aOutputs, NULL));
+  // check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
+  InitFilterGraph(speed2, volume);
+  // audio frames are stale
+  // avcodec_flush_buffers(aCodecCtx);
+  Seek(GetPosition());
   // Play will rescale the playback base
   if (!wasPaused)
     Play();
