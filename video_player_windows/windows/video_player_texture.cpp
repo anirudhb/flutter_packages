@@ -458,7 +458,7 @@ void VideoPlayerTexture::SendTimeUpdate(int64_t millis) {
 void VideoPlayerTexture::SendBufferingStart() {
   if (!fl_event_sink)
     return;
-  std::cerr << "Sending buffering start event" << std::endl;
+  // std::cerr << "Sending buffering start event" << std::endl;
   flutter::EncodableMap m;
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingStart");
   fl_event_sink->Success(flutter::EncodableValue(m));
@@ -467,7 +467,7 @@ void VideoPlayerTexture::SendBufferingStart() {
 void VideoPlayerTexture::SendBufferingEnd() {
   if (!fl_event_sink)
     return;
-  std::cerr << "Sending buffering end event" << std::endl;
+  // std::cerr << "Sending buffering end event" << std::endl;
   flutter::EncodableMap m;
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingEnd");
   fl_event_sink->Success(flutter::EncodableValue(m));

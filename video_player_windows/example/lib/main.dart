@@ -1,3 +1,4 @@
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -17,6 +18,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   bool _videoDisposed = true;
   VideoPlayerController? _controller;
+  ChewieController? _chewie;
   GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey();
   // String? currentVideoUrl;
   List<List<String>> videos = [
@@ -51,9 +53,12 @@ class _MyAppState extends State<MyApp> {
     super.initState();
   }
 
-  void _initializeVideo(String url) {
+  void _initializeVideo(String url) async {
     _controller = VideoPlayerController.network(url);
-    _controller!.initialize();
+    await _controller!.initialize();
+    _chewie = ChewieController(
+      videoPlayerController: _controller!,
+    );
     setState(() {
       _videoDisposed = false;
     });
@@ -65,6 +70,7 @@ class _MyAppState extends State<MyApp> {
       _videoDisposed = true;
     });
     _controller?.dispose();
+    _chewie?.dispose();
     Navigator.of(_scaffoldKey.currentContext!).pop();
   }
 
@@ -90,19 +96,10 @@ class _MyAppState extends State<MyApp> {
         body: Center(
           child: _videoDisposed
               ? Text("Video is disposed")
-              : VideoPlayer(_controller!),
-        ),
-        floatingActionButton: !_videoDisposed
-            ? ValueListenableBuilder<VideoPlayerValue>(
-                valueListenable: _controller!,
-                builder: (context, value, _) => FloatingActionButton(
-                  child: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
-                  onPressed: () => value.isPlaying
-                      ? _controller!.pause()
-                      : _controller!.play(),
+              : Chewie(
+                  controller: _chewie!,
                 ),
-              )
-            : null,
+        ),
         drawer: Drawer(
           child: ListView(
             children: _videoDisposed
@@ -169,5 +166,6 @@ class _MyAppState extends State<MyApp> {
   void dispose() {
     super.dispose();
     _controller?.dispose();
+    _chewie?.dispose();
   }
 }
