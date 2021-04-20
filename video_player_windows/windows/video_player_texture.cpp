@@ -26,7 +26,8 @@ static void check_error_or_die2(const char *file, int line, int e) {
 
 #define check_error_or_die(e) check_error_or_die2(__FILE__, __LINE__, e)
 
-static const char *filter_descr = "aresample=44100,aformat=sample_fmts=u8:channel_layouts=stereo";
+static const char *filter_descr =
+    "atempo=1.0,volume=1.0,aresample=44100,aformat=sample_fmts=u8:channel_layouts=stereo";
 
 VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
   av_log_set_level(AV_LOG_VERBOSE);
@@ -150,15 +151,16 @@ void VideoPlayerTexture::InitFilterGraph(double speed3, double volume3) {
   inputs->pad_idx = 0;
   inputs->next = NULL;
 
-  const char *desc_ptr = filter_descr;
-  if ((speed3 != 0 && speed3 != 1) || (volume3 != 0 && volume3 != 1)) {
-    snprintf(args, sizeof(args), "atempo=%.3f,volume=%.3f,%s", speed3 == 0 ? 1 : speed3,
-             volume3 == 0 ? 1 : volume3, filter_descr);
-    desc_ptr = args;
-  }
-  std::cerr << "using filter description= " << args << std::endl;
+  // const char *desc_ptr = filter_descr;
+  // // if ((speed3 != 0 && speed3 != 1) || (volume3 != 0 && volume3 != 1)) {
+  // if (1) {
+  //   snprintf(args, sizeof(args), "atempo=%.3f,volume=%.3f,%s", speed3 == 0 ? 1 : speed3,
+  //            volume3 == 0 ? 1 : volume3, filter_descr);
+  //   desc_ptr = args;
+  // }
+  // std::cerr << "using filter description= " << args << std::endl;
 
-  check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, desc_ptr, &inputs, &outputs, NULL));
+  check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, filter_descr, &inputs, &outputs, NULL));
   check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
 
   outlink = aSinkCtx->inputs[0];
@@ -557,15 +559,19 @@ void VideoPlayerTexture::Seek(int64_t millis) {
     Play();
 }
 void VideoPlayerTexture::SetVolume(double volume2) {
-  bool wasPaused = paused;
-  Pause();
-  // Rescale existing frames
   volume = volume2;
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%.3f", volume2);
+  avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
+  // bool wasPaused = paused;
+  // Pause();
+  // Rescale existing frames
+  // volume = volume2;
   // m_audio_frames.lock();
   // Reinitialize filter
-  InitFilterGraph(speed, volume2);
+  // InitFilterGraph(speed, volume2);
   // Audio frames are stale
-  Seek(GetPosition());
+  // Seek(GetPosition());
   // // try to also rescale current frame
   // // not perfect!
   // for (auto it = current_audio_frame.data.begin(); it != current_audio_frame.data.end(); it++) {
@@ -577,8 +583,8 @@ void VideoPlayerTexture::SetVolume(double volume2) {
   //   }
   // }
   // m_audio_frames.unlock();
-  if (!wasPaused)
-    Play();
+  // if (!wasPaused)
+  //   Play();
 }
 void VideoPlayerTexture::SetSpeed(double speed2) {
   bool wasPaused = paused;
@@ -592,10 +598,13 @@ void VideoPlayerTexture::SetSpeed(double speed2) {
   // snprintf(args, sizeof(args), "%s,atempo=%.3f", filter_descr, speed2);
   // check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, args, &aInputs, &aOutputs, NULL));
   // check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
-  InitFilterGraph(speed2, volume);
+  // InitFilterGraph(speed2, volume);
   // audio frames are stale
   // avcodec_flush_buffers(aCodecCtx);
-  Seek(GetPosition());
+  // Seek(GetPosition());
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%.3f", speed2);
+  avfilter_graph_send_command(aFilterGraph, "atempo", "tempo", buf, NULL, 0, 0);
   // Play will rescale the playback base
   if (!wasPaused)
     Play();
