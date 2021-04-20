@@ -75,11 +75,6 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
     audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000;
 
     InitFilterGraph();
-
-    swrCtx = swr_alloc_set_opts(NULL, aCodecCtx->channel_layout, AV_SAMPLE_FMT_U8,
-                                aCodecCtx->sample_rate, aCodecCtx->channel_layout,
-                                aCodecCtx->sample_fmt, aCodecCtx->sample_rate, 0, NULL);
-    swr_init(swrCtx);
   }
 
   vCodecCtxOrig = cFormatCtx->streams[vStream]->codec;
@@ -109,7 +104,7 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
                           vCodecCtx->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, NULL, NULL, NULL);
 }
 
-void VideoPlayerTexture::InitFilterGraph(double speed3, double volume3) {
+void VideoPlayerTexture::InitFilterGraph() {
   // setup filter graph
   char args[512];
   const AVFilter *abuffersrc = avfilter_get_by_name("abuffer");
@@ -151,15 +146,6 @@ void VideoPlayerTexture::InitFilterGraph(double speed3, double volume3) {
   inputs->pad_idx = 0;
   inputs->next = NULL;
 
-  // const char *desc_ptr = filter_descr;
-  // // if ((speed3 != 0 && speed3 != 1) || (volume3 != 0 && volume3 != 1)) {
-  // if (1) {
-  //   snprintf(args, sizeof(args), "atempo=%.3f,volume=%.3f,%s", speed3 == 0 ? 1 : speed3,
-  //            volume3 == 0 ? 1 : volume3, filter_descr);
-  //   desc_ptr = args;
-  // }
-  // std::cerr << "using filter description= " << args << std::endl;
-
   check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, filter_descr, &inputs, &outputs, NULL));
   check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
 
@@ -190,7 +176,7 @@ VideoPlayerTexture::~VideoPlayerTexture() {
   if (aStream != -1) {
     av_frame_free(&aFrame);
     av_frame_free(&aFilterFrame);
-    // TODO: free filter graph
+    avfilter_graph_free(&aFilterGraph);
   }
   av_frame_free(&vFrameRGB);
   av_frame_free(&vFrame);
@@ -414,7 +400,6 @@ VideoPlayerTexture::ReadFrame() {
       }
       e = avcodec_receive_frame(vCodecCtx, vFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
-        target_pts = vFrame->pts;
         sws_scale(swsCtx, vFrame->data, vFrame->linesize, 0, vCodecCtx->height, vFrameRGB->data,
                   vFrameRGB->linesize);
         // got a frame
@@ -443,20 +428,6 @@ VideoPlayerTexture::ReadFrame() {
                                aFilterFrame->pkt_pts);
           av_frame_unref(aFilterFrame);
         }
-        // const uint8_t **in = const_cast<const uint8_t **>(aFrame->extended_data);
-        // uint8_t *out = NULL;
-        // int out_linesize;
-        // av_samples_alloc(&out, &out_linesize, 2, 44100, AV_SAMPLE_FMT_U8, 0);
-        // int ret = swr_convert(swrCtx, &out, 44100, in, aFrame->nb_samples);
-        // int bufsize = ret * aCodecCtx->channels;
-        // double volume2 = volume;
-        // if (volume2 != 1) {
-        //   // scale
-        //   for (int i = 0; i < bufsize; i++) {
-        //     out[i] = static_cast<double>(out[i]) * volume;
-        //   }
-        // }
-        // adFrame = AudioFrame(out, bufsize, aFrame->pkt_pts);
       }
     }
     av_free_packet(&packet);
@@ -563,45 +534,12 @@ void VideoPlayerTexture::SetVolume(double volume2) {
   char buf[64];
   snprintf(buf, sizeof(buf), "%.3f", volume2);
   avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
-  // bool wasPaused = paused;
-  // Pause();
-  // Rescale existing frames
-  // volume = volume2;
-  // m_audio_frames.lock();
-  // Reinitialize filter
-  // InitFilterGraph(speed, volume2);
-  // Audio frames are stale
-  // Seek(GetPosition());
-  // // try to also rescale current frame
-  // // not perfect!
-  // for (auto it = current_audio_frame.data.begin(); it != current_audio_frame.data.end(); it++) {
-  //   *it = static_cast<double>(*it) * volume2;
-  // }
-  // for (auto &frame : audio_frames) {
-  //   for (auto it = frame.data.begin(); it != frame.data.end(); it++) {
-  //     *it = static_cast<double>(*it) * volume2;
-  //   }
-  // }
-  // m_audio_frames.unlock();
-  // if (!wasPaused)
-  //   Play();
 }
 void VideoPlayerTexture::SetSpeed(double speed2) {
   bool wasPaused = paused;
   Pause();
   speed = speed2;
   pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
-  // if (aStream != -1)
-  //   audio_size_micros = av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000 / speed2;
-  // Reinitialize filter
-  // char args[512];
-  // snprintf(args, sizeof(args), "%s,atempo=%.3f", filter_descr, speed2);
-  // check_error_or_die(avfilter_graph_parse_ptr(aFilterGraph, args, &aInputs, &aOutputs, NULL));
-  // check_error_or_die(avfilter_graph_config(aFilterGraph, NULL));
-  // InitFilterGraph(speed2, volume);
-  // audio frames are stale
-  // avcodec_flush_buffers(aCodecCtx);
-  // Seek(GetPosition());
   char buf[64];
   snprintf(buf, sizeof(buf), "%.3f", speed2);
   avfilter_graph_send_command(aFilterGraph, "atempo", "tempo", buf, NULL, 0, 0);

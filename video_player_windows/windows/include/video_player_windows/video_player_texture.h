@@ -55,10 +55,7 @@ private:
   void FrameThreadProc();
   void AudioThreadProc();
 
-  // Initialize the filter graph
-  // with given speed and volume
-  // if speed is zero, speed is not included in graph (ditto volume)
-  void InitFilterGraph(double speed = 0, double volume = 0);
+  void InitFilterGraph();
 
   void SendTimeUpdate(int64_t secs);
   void SendBufferingStart();
@@ -85,9 +82,6 @@ private:
   uint8_t *render_buffer = NULL;
   int bufsize;
   struct SwsContext *swsCtx = NULL;
-  struct SwrContext *swrCtx = NULL;
-  int64_t current_pts = 0;
-  int64_t target_pts = 0;
   std::atomic<int64_t> pts_size_micros = 0;
   std::atomic<int64_t> audio_size_micros = 0;
   int64_t fps = 1;
