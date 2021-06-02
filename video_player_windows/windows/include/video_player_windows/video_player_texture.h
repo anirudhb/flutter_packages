@@ -56,6 +56,8 @@ private:
   void AudioThreadProc();
 
   void InitFilterGraph();
+  void FlushWaitFrame(bool waitForVFrame = true, bool waitForAFrame = true, bool flush = true);
+  void ResetPlaybackBase();
 
   void SendTimeUpdate(int64_t secs);
   void SendBufferingStart();
@@ -102,11 +104,13 @@ private:
   int64_t tid;
   std::deque<VideoFrame> video_frames;
   std::mutex m_video_frames;
+  std::mutex mw_current_video_frame;
   VideoFrame current_video_frame = VideoFrame();
   // Used by renderer
   VideoFrame current_video_frame2 = VideoFrame();
   std::deque<AudioFrame> audio_frames;
   std::mutex m_audio_frames;
+  std::mutex mw_current_audio_frame;
   AudioFrame current_audio_frame;
   std::thread decodeThread;
   std::thread frameThread;

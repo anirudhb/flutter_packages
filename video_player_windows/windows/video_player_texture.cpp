@@ -330,9 +330,22 @@ void VideoPlayerTexture::AudioThreadProc() {
       // Present the frame
       ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
     }
+    // std::cerr << "waiting for af lock" << std::endl;
+    mw_current_audio_frame.lock();
+    current_audio_frame = std::move(frame);
+    mw_current_audio_frame.unlock();
+    // std::cerr << "done with af lock" << std::endl;
   }
 done:
   ao_close(device);
+}
+
+void VideoPlayerTexture::ResetPlaybackBase() {
+  // Reset playback start
+  // pts_size_micros can be wrong
+  // int64_t real_pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000;
+  playback_start = std::chrono::system_clock::now() -
+                   std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
 }
 
 void VideoPlayerTexture::FrameThreadProc() {
@@ -342,9 +355,7 @@ void VideoPlayerTexture::FrameThreadProc() {
     if (paused) {
       while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
-      // Reset playback start
-      playback_start = std::chrono::system_clock::now() -
-                       std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
+      ResetPlaybackBase();
     }
     VideoFrame frame;
     bool didBuffer = false;
@@ -374,8 +385,10 @@ void VideoPlayerTexture::FrameThreadProc() {
       std::this_thread::sleep_for(target - now);
     }
     // force destruction
-    current_video_frame = VideoFrame();
+    // current_video_frame = VideoFrame();
+    mw_current_video_frame.lock();
     current_video_frame = std::move(frame);
+    mw_current_video_frame.unlock();
     registrar->MarkTextureFrameAvailable(tid);
   }
 done:
@@ -419,13 +432,13 @@ VideoPlayerTexture::ReadFrame() {
       }
       e = avcodec_receive_frame(aCodecCtx, aFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
+        int64_t apts = aFrame->pts;
         av_buffersrc_add_frame(aSrcCtx, aFrame);
         e = av_buffersink_get_frame(aSinkCtx, aFilterFrame);
         if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
           int bufsize = aFilterFrame->nb_samples *
                         av_get_channel_layout_nb_channels(aFilterFrame->channel_layout);
-          adFrame = AudioFrame(reinterpret_cast<uint8_t *>(aFilterFrame->data[0]), bufsize,
-                               aFilterFrame->pkt_pts);
+          adFrame = AudioFrame(reinterpret_cast<uint8_t *>(aFilterFrame->data[0]), bufsize, apts);
           av_frame_unref(aFilterFrame);
         }
       }
@@ -482,29 +495,22 @@ void VideoPlayerTexture::SendCompleted() {
   fl_event_sink->Success(flutter::EncodableValue(m));
 }
 
-int64_t VideoPlayerTexture::GetPosition() { return current_video_frame.frame_number * 1000 / fps; }
-void VideoPlayerTexture::Pause() { paused = true; }
-void VideoPlayerTexture::Play() { paused = false; }
-void VideoPlayerTexture::Seek(int64_t millis) {
-  bool wasPlaying = !paused;
-  Pause();
+void VideoPlayerTexture::FlushWaitFrame(bool waitForVFrame, bool waitForAFrame, bool flush) {
   m_video_frames.lock();
   m_audio_frames.lock();
-  // Can't trust pts_size_micros since it may be warped by playback speed
-  int64_t target_pts = millis * 1000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
-  target_pts = std::max(target_pts, static_cast<int64_t>(0));
-  av_seek_frame(cFormatCtx, vStream, target_pts, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
   if (aStream != -1) {
-    avcodec_flush_buffers(aCodecCtx);
+    if (flush)
+      avcodec_flush_buffers(aCodecCtx);
     // Frames are stale
     while (!audio_frames.empty())
       audio_frames.pop_front();
   }
-  avcodec_flush_buffers(vCodecCtx);
+  if (flush)
+    avcodec_flush_buffers(vCodecCtx);
   // Frames are stale
   while (!video_frames.empty())
     video_frames.pop_front();
-  current_audio_frame.pts = target_pts;
+  // current_audio_frame.pts = target_pts;
   // Read frames until we get one
   // so that the user does not have a bad experience
   // This may result in the pts being off by a few frames
@@ -519,39 +525,149 @@ void VideoPlayerTexture::Seek(int64_t millis) {
       vf = std::move(vf2);
     if (af2.has_value())
       af = std::move(af2);
-    if (done || (vf.has_value() && af.has_value()))
+    // tolerance is 1ms
+    if ((done || ((!waitForVFrame || vf.has_value()) && (!waitForAFrame || af.has_value()))) &&
+        true)
+      // (!waitForVFrame || !waitForAFrame ||
+      //  std::abs(((*vf).frame_number * 1000000 / fps) - ((*af).pts * audio_size_micros)) <=
+      //      1000000000))
       break;
   }
-  current_video_frame = std::move(*vf);
-  current_audio_frame = std::move(*af);
+  // std::cerr << "Size of audio frame (micros) = " << (*af).data.size() * 1000000 / (2 * 44100)
+  //           << std::endl;
+  if (vf.has_value()) {
+    mw_current_video_frame.lock();
+    current_video_frame = std::move(*vf);
+    mw_current_video_frame.unlock();
+  }
+  if (af.has_value()) {
+    mw_current_audio_frame.lock();
+    current_audio_frame = std::move(*af);
+    mw_current_audio_frame.unlock();
+  }
+  video_frames.push_front(current_video_frame);
+  audio_frames.push_front(current_audio_frame);
   m_video_frames.unlock();
   m_audio_frames.unlock();
+}
+
+int64_t VideoPlayerTexture::GetPosition() { return current_video_frame.frame_number * 1000 / fps; }
+void VideoPlayerTexture::Pause() { paused = true; }
+void VideoPlayerTexture::Play() { paused = false; }
+void VideoPlayerTexture::Seek(int64_t millis) {
+  bool wasPlaying = !paused;
+  Pause();
+  // Can't trust pts_size_micros since it may be warped by playback speed
+  int64_t target_pts = millis * 1000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
+  // int64_t variance = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000;
+  target_pts = std::max(target_pts, static_cast<int64_t>(0));
+  // tolerate up to 1ms of difference
+  int64_t pts_tolerance = 1000000000 / pts_size_micros;
+  std::cerr << std::endl << "vPTS tolerance: " << pts_tolerance << std::endl;
+  bool forwards = target_pts > current_video_frame.pts;
+  av_seek_frame(cFormatCtx, vStream, target_pts, AVSEEK_FLAG_BACKWARD);
+  FlushWaitFrame(true, true, !forwards);
+  while (std::abs(std::max(static_cast<int64_t>(0), current_video_frame.pts) - target_pts) >
+         pts_tolerance) {
+    std::cerr << "Dropping vframe pts="
+              << std::max(static_cast<int64_t>(0), current_video_frame.pts)
+              << ", target=" << target_pts << std::endl;
+    FlushWaitFrame(true, true, false);
+  }
+  // ResetPlaybackBase();
   if (wasPlaying)
     Play();
 }
 void VideoPlayerTexture::SetVolume(double volume2) {
+  if (aStream == -1)
+    return;
   volume = volume2;
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%.3f", volume2);
-  avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
+  // char buf[64];
+  // snprintf(buf, sizeof(buf), "%.3f", volume2);
+  // avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
+  // av_seek_frame(cFormatCtx, aStream, current_audio_frame.pts | AVSEEK_FORCE,
+  //               AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+  // // FlushWaitFrame();
+  // m_video_frames.lock();
+  // m_audio_frames.lock();
+  // if (aStream != -1) {
+  //   avcodec_flush_buffers(aCodecCtx);
+  //   // Frames are stale
+  //   while (!audio_frames.empty())
+  //     audio_frames.pop_front();
+  // }
+  // avcodec_flush_buffers(vCodecCtx);
+  // // Frames are stale
+  // while (!video_frames.empty())
+  //   video_frames.pop_front();
+  // m_video_frames.unlock();
+  // m_audio_frames.unlock();
 }
 void VideoPlayerTexture::SetSpeed(double speed2) {
   bool wasPaused = paused;
+  double oldSpeed = speed;
+  // nothing to do
+  if (speed2 == oldSpeed)
+    return;
   Pause();
   speed = speed2;
-  pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
   char buf[64];
   snprintf(buf, sizeof(buf), "%.3f", speed2);
   avfilter_graph_send_command(aFilterGraph, "atempo", "tempo", buf, NULL, 0, 0);
-  // Play will rescale the playback base
+  pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
+
+  // seek one pts behind so that we are not reverted in the current playback
+  int64_t apts_now = std::max(static_cast<int64_t>(0), current_audio_frame.pts);
+  // tolerate up to 1ms of difference
+  int64_t pts_tolerance = 1000000000 / audio_size_micros;
+  std::cerr << "Current aPTS = " << current_audio_frame.pts << std::endl;
+  std::cerr << std::endl << "aPTS tolerance: " << pts_tolerance << std::endl;
+  bool forwards = speed2 >= oldSpeed;
+  av_seek_frame(cFormatCtx, aStream, current_audio_frame.pts, AVSEEK_FLAG_BACKWARD);
+  // if (!forwards) {
+  std::cerr << "Waiting for vFrame=" << !forwards << ", aFrame=true, flushing=" << !forwards
+            << std::endl;
+  FlushWaitFrame(!forwards, true, !forwards);
+  while (std::abs(std::max(static_cast<int64_t>(0), current_audio_frame.pts) - apts_now) >
+         pts_tolerance) {
+    std::cerr << "Dropping aframe pts="
+              << std::max(static_cast<int64_t>(0), current_audio_frame.pts)
+              << ", target=" << apts_now << std::endl;
+    FlushWaitFrame(!forwards, true, false);
+  }
+  // } else {
+  //   m_video_frames.lock();
+  //   m_audio_frames.lock();
+  //   if (aStream != -1) {
+  //     avcodec_flush_buffers(aCodecCtx);
+  //     // Frames are stale
+  //     while (!audio_frames.empty())
+  //       audio_frames.pop_front();
+  //   }
+  //   avcodec_flush_buffers(vCodecCtx);
+  //   // Frames are stale
+  //   while (!video_frames.empty())
+  //     video_frames.pop_front();
+  //   m_video_frames.unlock();
+  //   m_audio_frames.unlock();
+  // }
+  // current_video_frame.pts *= speed2;
+
+  // ResetPlaybackBase();
+
   if (!wasPaused)
     Play();
+  // // Play will rescale the playback base
+  // if (!wasPaused)
+  //   Play();
 }
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // Forces destructor to be called, so that memory doesn't leak
-  current_video_frame2 = VideoFrame();
-  current_video_frame2 = std::move(current_video_frame);
+  // current_video_frame2 = VideoFrame();
+  mw_current_video_frame.lock();
+  current_video_frame2 = current_video_frame;
+  mw_current_video_frame.unlock();
   fl_buffer.buffer = current_video_frame2.data.data();
   fl_buffer.width = vCodecCtx->width;
   fl_buffer.height = vCodecCtx->height;
