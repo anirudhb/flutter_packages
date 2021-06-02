@@ -7,7 +7,7 @@ public:
       : data(data_ptr, data_ptr + data_size), pts(pts), frame_number(frame_number){};
 
   int frame_number;
-  int64_t pts = 0;
+  int64_t pts;
   std::vector<uint8_t> data;
 };
 
@@ -17,6 +17,6 @@ public:
   AudioFrame(uint8_t *data_ptr, size_t data_size, int64_t pts)
       : data(data_ptr, data_ptr + data_size), pts(pts){};
 
-  int64_t pts = 0;
+  int64_t pts;
   std::vector<uint8_t> data;
 };
