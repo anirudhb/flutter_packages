@@ -343,8 +343,12 @@ void VideoPlayerTexture::FrameThreadProc() {
       while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // Reset playback start
+      auto old_playback_start = playback_start;
+      std::cerr << "Current video frame pts = " << current_video_frame.pts << std::endl;
       playback_start = std::chrono::system_clock::now() -
                        std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
+      std::cerr << "old playback start = " << old_playback_start.time_since_epoch().count()
+                << " new = " << playback_start.time_since_epoch().count() << std::endl;
     }
     VideoFrame frame;
     bool didBuffer = false;
@@ -364,6 +368,7 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (!didBuffer)
         SendBufferingStart();
       didBuffer = true;
+      std::cerr << "Waiting for video frame..." << std::endl;
     }
     if (didBuffer)
       SendBufferingEnd();
@@ -371,12 +376,32 @@ void VideoPlayerTexture::FrameThreadProc() {
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(pts_size_micros * frame.pts);
     if (now < target) {
-      std::this_thread::sleep_for(target - now);
+      std::cerr << "Sleeping for "
+                << std::chrono::duration_cast<std::chrono::microseconds>(target - now).count()
+                << "micros" << std::endl;
+      // Sleep in 10000usec chunks
+      long long sz = std::chrono::duration_cast<std::chrono::microseconds>(target - now).count();
+      constexpr long long chunk_sz = 10000;
+      long long sleep_time = chunk_sz;
+      for (long long i = 0; i < sz; i += sleep_time) {
+        sleep_time = std::min(chunk_sz, sz - i);
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_time));
+        /* Check for desync and drop frame if needed
+           That is, if the peeked frame's pts is >1s away from the current frame */
+        if (!video_frames.empty() &&
+            std::abs(video_frames.front().pts - frame.pts) > (1000000 / pts_size_micros))
+          goto desync;
+      }
+      // std::this_thread::sleep_for(target - now);
     }
     // force destruction
     current_video_frame = VideoFrame();
     current_video_frame = std::move(frame);
     registrar->MarkTextureFrameAvailable(tid);
+    continue;
+  desync:
+    std::cerr << "video got desynced (is the video being seeked backwards?), dropping frame"
+              << std::endl;
   }
 done:
   SendCompleted();
@@ -492,8 +517,13 @@ void VideoPlayerTexture::Seek(int64_t millis) {
   m_audio_frames.lock();
   // Can't trust pts_size_micros since it may be warped by playback speed
   int64_t target_pts = millis * 1000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
+  // // 1 second
+  int64_t vTolerance = 1000000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
+  bool isBackwards = target_pts < current_video_frame.pts;
+  std::cerr << "Vpts tolerance for seeking = " << vTolerance << ", target vpts = " << target_pts
+            << std::endl;
   target_pts = std::max(target_pts, static_cast<int64_t>(0));
-  av_seek_frame(cFormatCtx, vStream, target_pts, AVSEEK_FLAG_ANY | AVSEEK_FLAG_BACKWARD);
+  av_seek_frame(cFormatCtx, vStream, target_pts | AVSEEK_FORCE, AVSEEK_FLAG_BACKWARD);
   if (aStream != -1) {
     avcodec_flush_buffers(aCodecCtx);
     // Frames are stale
@@ -504,11 +534,8 @@ void VideoPlayerTexture::Seek(int64_t millis) {
   // Frames are stale
   while (!video_frames.empty())
     video_frames.pop_front();
-  current_audio_frame.pts = target_pts;
-  // Read frames until we get one
-  // so that the user does not have a bad experience
-  // This may result in the pts being off by a few frames
-  // but it should not be a big deal
+  current_video_frame.pts = target_pts;
+  // current_audio_frame.pts = target_pts;
   std::optional<VideoFrame> vf;
   std::optional<AudioFrame> af;
   while (true) {
@@ -519,11 +546,19 @@ void VideoPlayerTexture::Seek(int64_t millis) {
       vf = std::move(vf2);
     if (af2.has_value())
       af = std::move(af2);
-    if (done || (vf.has_value() && af.has_value()))
+    // NOTE: even when seeking backwards, the best we can do is get a frame after our target
+    if (done || (vf.has_value() && af.has_value() && vf->pts >= target_pts))
       break;
+    if (vf.has_value() && af.has_value())
+      std::cerr << "Skipping frame with pts=" << vf->pts << ", target=" << target_pts
+                << ", tolerance=" << vTolerance << ", backwards=" << isBackwards << std::endl;
   }
+  // video_frames.push_back(std::move(*vf));
+  // audio_frames.push_back(std::move(*af));
   current_video_frame = std::move(*vf);
   current_audio_frame = std::move(*af);
+  std::cerr << "current_video_frame pts = " << current_video_frame.pts << ", target=" << target_pts
+            << std::endl;
   m_video_frames.unlock();
   m_audio_frames.unlock();
   if (wasPlaying)
