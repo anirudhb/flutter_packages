@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "include/video_player_windows/logging.h"
 #include "include/video_player_windows/video_player_texture.h"
 
 #include <flutter/standard_method_codec.h>
@@ -15,31 +16,26 @@ extern "C" {
 
 #include <ao.h>
 
-static void check_error_or_die2(const char *file, int line, int e) {
-  if (e < 0) {
-    // error
-    char buf[AV_ERROR_MAX_STRING_SIZE];
-    av_make_error_string(buf, AV_ERROR_MAX_STRING_SIZE, -e);
-    std::cerr << std::endl << "[" << file << ":" << line << "] av error: " << buf << std::endl;
-  }
-}
-
-#define check_error_or_die(e) check_error_or_die2(__FILE__, __LINE__, e)
+#define check_error_or_die(e)                                                                      \
+  do {                                                                                             \
+    if (e < 0) {                                                                                   \
+      char buf[AV_ERROR_MAX_STRING_SIZE];                                                          \
+      av_make_error_string(buf, AV_ERROR_MAX_STRING_SIZE, -e);                                     \
+      error_log << "av error: " << buf << std::endl;                                               \
+    }                                                                                              \
+  } while (0)
 
 static const char *filter_descr =
     "atempo=1.0,volume=1.0,aresample=44100,aformat=sample_fmts=u8:channel_layouts=stereo";
 
 VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
-  av_log_set_level(AV_LOG_VERBOSE);
-  av_log_set_callback(av_log_default_callback);
-
   AVDictionary *opts = NULL;
   // 10 seconds
   av_dict_set(&opts, "timeout", "10000000", 0);
 
   if (avformat_open_input(&cFormatCtx, uri.c_str(), NULL, &opts) != 0) {
     av_dict_free(&opts);
-    std::cerr << "Failed to open input" << std::endl;
+    fatal_log << "Failed to open input" << std::endl;
     std::exit(1);
   }
   av_dict_free(&opts);
@@ -60,7 +56,7 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
     }
   }
   if (vStream == -1) {
-    std::cerr << "No video streams found in URI " << uri << "!" << std::endl;
+    fatal_log << "No video streams found in URI " << uri << "!" << std::endl;
     std::exit(1);
   }
 
@@ -82,16 +78,16 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
 
   vCodec = avcodec_find_decoder(vCodecCtxOrig->codec_id);
   if (vCodec == NULL) {
-    std::cerr << "No decoder found for codec ID " << vCodecCtxOrig->codec_id << "!" << std::endl;
+    fatal_log << "No decoder found for codec ID " << vCodecCtxOrig->codec_id << "!" << std::endl;
     std::exit(1);
   }
-  std::cerr << "Video codec name = " << avcodec_get_name(vCodec->id) << std::endl;
+  info_log << "Video codec name: " << avcodec_get_name(vCodec->id) << std::endl;
 
   vCodecCtx = avcodec_alloc_context3(vCodec);
   avcodec_copy_context(vCodecCtx, vCodecCtxOrig);
   avcodec_open2(vCodecCtx, vCodec, NULL);
   fps = av_q2d(vCodecCtx->framerate);
-  std::cerr << "fps=" << fps << std::endl;
+  info_log << "FPS: " << fps << std::endl;
 
   vFrame = av_frame_alloc();
   vFrameRGB = av_frame_alloc();
@@ -125,7 +121,7 @@ void VideoPlayerTexture::InitFilterGraph() {
   snprintf(args, sizeof(args), "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%llx",
            aTimeBase.num, aTimeBase.den, aCodecCtx->sample_rate,
            av_get_sample_fmt_name(aCodecCtx->sample_fmt), aCodecCtx->channel_layout);
-  std::cerr << "args=" << args << std::endl;
+  debug_log << "Args = " << args << std::endl;
   check_error_or_die(
       avfilter_graph_create_filter(&aSrcCtx, abuffersrc, "in", args, NULL, aFilterGraph));
   check_error_or_die(
@@ -151,7 +147,7 @@ void VideoPlayerTexture::InitFilterGraph() {
 
   outlink = aSinkCtx->inputs[0];
   av_get_channel_layout_string(args, sizeof(args), -1, outlink->channel_layout);
-  std::cout << "output srate=" << outlink->sample_rate << "hz fmt="
+  debug_log << "output srate=" << outlink->sample_rate << "hz fmt="
             << av_x_if_null(av_get_sample_fmt_name(static_cast<AVSampleFormat>(outlink->format)),
                             "?")
             << " chlayout=" << args << std::endl;
@@ -203,7 +199,6 @@ int64_t VideoPlayerTexture::RegisterWithTextureRegistrar(flutter::TextureRegistr
     audioThread = std::thread(std::bind(&VideoPlayerTexture::AudioThreadProc, this));
 
   int64_t tid = registrar->RegisterTexture(texture_.get());
-  // registrar->MarkTextureFrameAvailable(tid);
   this->tid = tid;
 
   return tid;
@@ -212,7 +207,7 @@ int64_t VideoPlayerTexture::RegisterWithTextureRegistrar(flutter::TextureRegistr
 void VideoPlayerTexture::SetupEventChannel(flutter::BinaryMessenger *messenger) {
   std::ostringstream chan_name;
   chan_name << "flutter.io/videoPlayer/videoEvents" << tid;
-  std::cout << "Registering channel with name " << chan_name.str() << std::endl;
+  info_log << "Registering channel with name " << chan_name.str() << std::endl;
   fl_event_channel = std::make_unique<flutter::EventChannel<flutter::EncodableValue>>(
       messenger, chan_name.str(), &flutter::StandardMethodCodec::GetInstance());
   fl_stream_handler = std::make_unique<VideoPlayerStreamHandler>(this);
@@ -225,8 +220,8 @@ void VideoPlayerTexture::DecodeThreadProc() {
   // Would like to keep memory usage <=200mb
   size_t max_queue_items = 209715200 / (vCodecCtx->width * vCodecCtx->height * 4);
   size_t max_aqueue_items = 209715200 / (2 * 44100 * 1);
-  std::cerr << "Max queue items: " << max_queue_items << std::endl;
-  std::cerr << "Max audio queue items: " << max_aqueue_items << std::endl;
+  info_log << "Max queue items: " << max_queue_items << std::endl;
+  info_log << "Max audio queue items: " << max_aqueue_items << std::endl;
   while (!stopped) {
     // Check if paused
     if (paused) {
@@ -306,7 +301,6 @@ void VideoPlayerTexture::AudioThreadProc() {
       if (done || stopped) {
         goto done;
       }
-      // std::cerr << "Waiting for audio frame..." << std::endl;
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
     }
     auto now = std::chrono::system_clock::now();
@@ -314,22 +308,8 @@ void VideoPlayerTexture::AudioThreadProc() {
     if (now < target) {
       std::this_thread::sleep_for(target - now);
     }
-    // if (speed != 1) {
-    if (0) {
-      // transform data
-      AVRational speed_r = av_d2q(speed, 100);
-      std::vector<uint8_t> new_data;
-      for (int i = 0; i < frame.data.size(); i += speed_r.den) {
-        uint8_t avg = 0;
-        for (int j = 0; j < speed_r.den; j++)
-          avg += frame.data[i + j];
-        new_data.push_back(avg / speed_r.den);
-      }
-      ao_play(device, reinterpret_cast<char *>(new_data.data()), new_data.size());
-    } else {
-      // Present the frame
-      ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
-    }
+    // Present the frame
+    ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
   }
 done:
   ao_close(device);
@@ -344,10 +324,10 @@ void VideoPlayerTexture::FrameThreadProc() {
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // Reset playback start
       auto old_playback_start = playback_start;
-      std::cerr << "Current video frame pts = " << current_video_frame.pts << std::endl;
+      debug_log << "Current video frame pts = " << current_video_frame.pts << std::endl;
       playback_start = std::chrono::system_clock::now() -
                        std::chrono::microseconds(current_video_frame.pts * pts_size_micros);
-      std::cerr << "old playback start = " << old_playback_start.time_since_epoch().count()
+      debug_log << "old playback start = " << old_playback_start.time_since_epoch().count()
                 << " new = " << playback_start.time_since_epoch().count() << std::endl;
     }
     VideoFrame frame;
@@ -368,7 +348,7 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (!didBuffer)
         SendBufferingStart();
       didBuffer = true;
-      std::cerr << "Waiting for video frame..." << std::endl;
+      debug_log << "Waiting for video frame..." << std::endl;
     }
     if (didBuffer)
       SendBufferingEnd();
@@ -376,7 +356,7 @@ void VideoPlayerTexture::FrameThreadProc() {
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(pts_size_micros * frame.pts);
     if (now < target) {
-      std::cerr << "Sleeping for "
+      debug_log << "Sleeping for "
                 << std::chrono::duration_cast<std::chrono::microseconds>(target - now).count()
                 << "micros" << std::endl;
       // Sleep in 10000usec chunks
@@ -400,8 +380,8 @@ void VideoPlayerTexture::FrameThreadProc() {
     registrar->MarkTextureFrameAvailable(tid);
     continue;
   desync:
-    std::cerr << "video got desynced (is the video being seeked backwards?), dropping frame"
-              << std::endl;
+    warn_log << "video got desynced (is the video being seeked backwards?), dropping frame"
+             << std::endl;
   }
 done:
   SendCompleted();
@@ -418,10 +398,9 @@ VideoPlayerTexture::ReadFrame() {
     if (packet.stream_index == vStream) {
       int e = avcodec_send_packet(vCodecCtx, &packet);
       if (e < 0) {
-        std::cerr << "Decode error!" << std::endl;
         char buf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(-e, buf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << buf << std::endl;
+        error_log << "Decode error: " << buf << std::endl;
       }
       e = avcodec_receive_frame(vCodecCtx, vFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
@@ -437,10 +416,9 @@ VideoPlayerTexture::ReadFrame() {
     } else if (aStream != -1 && packet.stream_index == aStream) {
       int e = avcodec_send_packet(aCodecCtx, &packet);
       if (e < 0) {
-        std::cerr << "Decode error!" << std::endl;
         char buf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(-e, buf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << buf << std::endl;
+        error_log << "Decode error: " << buf << std::endl;
       }
       e = avcodec_receive_frame(aCodecCtx, aFrame);
       if (e != AVERROR(EAGAIN) && e != AVERROR_EOF) {
@@ -457,7 +435,7 @@ VideoPlayerTexture::ReadFrame() {
     }
     av_free_packet(&packet);
   } else {
-    std::cout << "Done with video" << std::endl;
+    info_log << "Done with video" << std::endl;
     done = true;
   }
   return std::make_tuple(done, frame, adFrame);
@@ -467,7 +445,6 @@ void VideoPlayerTexture::SendTimeUpdate(int64_t millis) {
   if (!fl_event_sink)
     return;
   flutter::EncodableMap m;
-  // std::cerr << "Sending time update millis=" << millis << std::endl;
   // XXX: send buffering update
   flutter::EncodableList values = {
       flutter::EncodableValue(flutter::EncodableList{
@@ -483,7 +460,6 @@ void VideoPlayerTexture::SendTimeUpdate(int64_t millis) {
 void VideoPlayerTexture::SendBufferingStart() {
   if (!fl_event_sink)
     return;
-  // std::cerr << "Sending buffering start event" << std::endl;
   flutter::EncodableMap m;
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingStart");
   fl_event_sink->Success(flutter::EncodableValue(m));
@@ -492,7 +468,6 @@ void VideoPlayerTexture::SendBufferingStart() {
 void VideoPlayerTexture::SendBufferingEnd() {
   if (!fl_event_sink)
     return;
-  // std::cerr << "Sending buffering end event" << std::endl;
   flutter::EncodableMap m;
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingEnd");
   fl_event_sink->Success(flutter::EncodableValue(m));
@@ -501,7 +476,7 @@ void VideoPlayerTexture::SendBufferingEnd() {
 void VideoPlayerTexture::SendCompleted() {
   if (!fl_event_sink)
     return;
-  std::cerr << "Sending completed event" << std::endl;
+  info_log << "Sending completed event" << std::endl;
   flutter::EncodableMap m;
   m[flutter::EncodableValue("event")] = flutter::EncodableValue("completed");
   fl_event_sink->Success(flutter::EncodableValue(m));
@@ -517,10 +492,10 @@ void VideoPlayerTexture::Seek(int64_t millis) {
   m_audio_frames.lock();
   // Can't trust pts_size_micros since it may be warped by playback speed
   int64_t target_pts = millis * 1000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
-  // // 1 second
+  // 1 second
   int64_t vTolerance = 1000000 / (av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000);
   bool isBackwards = target_pts < current_video_frame.pts;
-  std::cerr << "Vpts tolerance for seeking = " << vTolerance << ", target vpts = " << target_pts
+  debug_log << "Vpts tolerance for seeking = " << vTolerance << ", target vpts = " << target_pts
             << std::endl;
   target_pts = std::max(target_pts, static_cast<int64_t>(0));
   av_seek_frame(cFormatCtx, vStream, target_pts | AVSEEK_FORCE, AVSEEK_FLAG_BACKWARD);
@@ -535,7 +510,6 @@ void VideoPlayerTexture::Seek(int64_t millis) {
   while (!video_frames.empty())
     video_frames.pop_front();
   current_video_frame.pts = target_pts;
-  // current_audio_frame.pts = target_pts;
   std::optional<VideoFrame> vf;
   std::optional<AudioFrame> af;
   while (true) {
@@ -550,14 +524,12 @@ void VideoPlayerTexture::Seek(int64_t millis) {
     if (done || (vf.has_value() && af.has_value() && vf->pts >= target_pts))
       break;
     if (vf.has_value() && af.has_value())
-      std::cerr << "Skipping frame with pts=" << vf->pts << ", target=" << target_pts
+      debug_log << "Skipping frame with pts=" << vf->pts << ", target=" << target_pts
                 << ", tolerance=" << vTolerance << ", backwards=" << isBackwards << std::endl;
   }
-  // video_frames.push_back(std::move(*vf));
-  // audio_frames.push_back(std::move(*af));
   current_video_frame = std::move(*vf);
   current_audio_frame = std::move(*af);
-  std::cerr << "current_video_frame pts = " << current_video_frame.pts << ", target=" << target_pts
+  debug_log << "current_video_frame pts = " << current_video_frame.pts << ", target=" << target_pts
             << std::endl;
   m_video_frames.unlock();
   m_audio_frames.unlock();

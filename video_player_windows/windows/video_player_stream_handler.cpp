@@ -1,5 +1,6 @@
 #include "include/video_player_windows/video_player_stream_handler.h"
 
+#include "include/video_player_windows/logging.h"
 #include "include/video_player_windows/video_player_texture.h"
 
 #include <flutter/encodable_value.h>
@@ -11,8 +12,7 @@ flutter::EncodableValue VideoPlayerStreamHandler::ConstructInitialized() {
   int64_t duration = texture->cFormatCtx->duration * 1000 / AV_TIME_BASE;
   int width = texture->vCodecCtx->width;
   int height = texture->vCodecCtx->height;
-  std::cerr << "Duration is " << duration << " ms, width = " << width << ", height = " << height
-            << std::endl;
+  info_log << duration << "ms, " << width << "x" << height << std::endl;
   m[flutter::EncodableValue("duration")] = flutter::EncodableValue(duration);
   m[flutter::EncodableValue("width")] = flutter::EncodableValue(width);
   m[flutter::EncodableValue("height")] = flutter::EncodableValue(height);

@@ -1,4 +1,5 @@
 #include "include/video_player_windows/video_player_windows_plugin.h"
+#include "include/video_player_windows/logging.h"
 #include "include/video_player_windows/messages.h"
 #include "include/video_player_windows/util.h"
 #include "include/video_player_windows/video_player_texture.h"
@@ -104,8 +105,8 @@ void VideoPlayerWindowsPlugin::HandleInitialize(
 void VideoPlayerWindowsPlugin::HandleCreate(
     const flutter::EncodableValue &message,
     const flutter::MessageReply<flutter::EncodableValue> &reply) {
-  std::cout << "Debug print of message:" << std::endl;
-  DebugPrintValue(message);
+  debug_log << "Debug print of message:" << std::endl;
+  debug_log << DebugPrintValue(message) << std::endl;
   CreateMessage cm(message);
   std::unique_ptr<VideoPlayerTexture> tex = std::make_unique<VideoPlayerTexture>(*cm.uri);
   int64_t tid = tex->RegisterWithTextureRegistrar(registrar->texture_registrar());
@@ -188,7 +189,7 @@ void VideoPlayerWindowsPlugin::HandleSetVolume(
   }
   std::unique_ptr<VideoPlayerTexture> &tex = textures[vm.textureId];
   tex->SetVolume(vm.volume);
-  std::cerr << "Volume set to " << vm.volume << std::endl;
+  info_log << "Volume set to " << vm.volume << std::endl;
   reply(WrapResult(std::monostate()));
 }
 
@@ -202,7 +203,7 @@ void VideoPlayerWindowsPlugin::HandleSetSpeed(
   }
   std::unique_ptr<VideoPlayerTexture> &tex = textures[sm.textureId];
   tex->SetSpeed(sm.speed);
-  std::cerr << "Speed set to " << sm.speed << std::endl;
+  info_log << "Speed set to " << sm.speed << std::endl;
   reply(WrapResult(std::monostate()));
 }
 

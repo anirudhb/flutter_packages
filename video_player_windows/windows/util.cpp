@@ -1,33 +1,37 @@
 #include <iostream>
+#include <sstream>
 
+#include "include/video_player_windows/logging.h"
 #include "include/video_player_windows/util.h"
 
-void DebugPrintValue(const flutter::EncodableValue &value, int indent) {
+std::string DebugPrintValue(const flutter::EncodableValue &value, int indent) {
+  std::ostringstream out;
   for (int i = 0; i < indent; i++)
-    std::cout << " ";
+    out << " ";
   // null, bool, int, double, string, map
   if (std::holds_alternative<std::monostate>(value)) {
-    std::cout << "null" << std::endl;
+    out << "null" << std::endl;
   } else if (std::holds_alternative<bool>(value)) {
-    std::cout << std::get<bool>(value) << std::endl;
+    out << std::get<bool>(value) << std::endl;
   } else if (std::holds_alternative<int32_t>(value)) {
-    std::cout << std::get<int32_t>(value) << std::endl;
+    out << std::get<int32_t>(value) << std::endl;
   } else if (std::holds_alternative<int64_t>(value)) {
-    std::cout << std::get<int64_t>(value) << std::endl;
+    out << std::get<int64_t>(value) << std::endl;
   } else if (std::holds_alternative<double>(value)) {
-    std::cout << std::get<double>(value) << std::endl;
+    out << std::get<double>(value) << std::endl;
   } else if (std::holds_alternative<std::string>(value)) {
-    std::cout << "string: " << std::get<std::string>(value) << std::endl;
+    out << "string: " << std::get<std::string>(value) << std::endl;
   } else if (std::holds_alternative<flutter::EncodableMap>(value)) {
     auto m = std::get<flutter::EncodableMap>(value);
     flutter::EncodableMap::iterator it;
     for (it = m.begin(); it != m.end(); it++) {
-      std::cout << "key:" << std::endl;
-      DebugPrintValue(it->first, indent + 2);
-      std::cout << "value:" << std::endl;
-      DebugPrintValue(it->second, indent + 2);
+      out << "key:" << std::endl;
+      out << DebugPrintValue(it->first, indent + 2);
+      out << "value:" << std::endl;
+      out << DebugPrintValue(it->second, indent + 2);
     }
   }
+  return out.str();
 }
 
 flutter::EncodableValue WrapResult(flutter::EncodableValue res) {

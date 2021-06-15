@@ -78,7 +78,9 @@
         "xlocmon": "cpp",
         "xloctime": "cpp",
         "strstream": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp"
     },
     "cmake.cmakePath": "C:\\Users\\anirudh\\Desktop\\SwitchDev\\cmake-3.18.0-win64-x64\\cmake-3.18.0-rc3-win64-x64\\bin\\cmake.exe",
     "cmake.sourceDirectory": "${workspaceFolder}/example/windows",
