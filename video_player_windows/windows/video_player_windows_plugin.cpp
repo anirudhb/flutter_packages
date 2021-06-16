@@ -108,6 +108,10 @@ void VideoPlayerWindowsPlugin::HandleCreate(
   debug_log << "Debug print of message:" << std::endl;
   debug_log << DebugPrintValue(message) << std::endl;
   CreateMessage cm(message);
+  if (!cm.uri.has_value()) {
+    reply(WrapError(flutter::EncodableValue("Only URIs are supported")));
+    return;
+  }
   std::unique_ptr<VideoPlayerTexture> tex = std::make_unique<VideoPlayerTexture>();
   int64_t tid = tex->RegisterWithTextureRegistrar(registrar->texture_registrar());
   tex->SetupEventChannel(registrar->messenger());
