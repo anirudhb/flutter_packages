@@ -1,7 +1,7 @@
 name: video_player_windows
 description: A new flutter plugin project.
 version: 0.0.1
-homepage:
+homepage: https://github.com/anirudhb/flutter_packages
 
 environment:
   sdk: ">=2.12.0 <3.0.0"
@@ -28,6 +28,7 @@ flutter:
     platforms:
       windows:
         pluginClass: VideoPlayerWindowsPlugin
+    implements: video_player
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:
