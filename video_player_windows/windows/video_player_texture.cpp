@@ -302,14 +302,35 @@ void VideoPlayerTexture::AudioThreadProc() {
         goto done;
       }
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
+      debug_log << "Waiting for audio frame..." << std::endl;
     }
     auto now = std::chrono::system_clock::now();
     auto target = playback_start + std::chrono::microseconds(audio_size_micros * frame.pts);
     if (now < target) {
-      std::this_thread::sleep_for(target - now);
+      debug_log << "Sleeping for "
+                << std::chrono::duration_cast<std::chrono::microseconds>(target - now).count()
+                << "micros" << std::endl;
+      // Sleep in 10000usec chunks
+      long long sz = std::chrono::duration_cast<std::chrono::microseconds>(target - now).count();
+      constexpr long long chunk_sz = 10000;
+      long long sleep_time = chunk_sz;
+      for (long long i = 0; i < sz; i += sleep_time) {
+        sleep_time = std::min(chunk_sz, sz - i);
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_time));
+        /* Check for desync and drop frame if needed
+           That is, if the peeked frame's pts is >1s away from the current frame
+         */
+        if (!audio_frames.empty() &&
+            std::abs(audio_frames.front().pts - frame.pts) > (1000000 / pts_size_micros))
+          goto desync;
+      }
     }
     // Present the frame
     ao_play(device, reinterpret_cast<char *>(frame.data.data()), frame.data.size());
+    continue;
+  desync:
+    warn_log << "Audio got desynced (is the video being seeked backwards?), dropping frame"
+             << std::endl;
   }
 done:
   ao_close(device);
