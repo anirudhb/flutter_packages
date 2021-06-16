@@ -120,6 +120,8 @@ void VideoPlayerTexture::Initialize() {
 }
 
 void VideoPlayerTexture::InitFilterGraph() {
+  if (aStream == -1)
+    return;
   // setup filter graph
   char args[512];
   const AVFilter *abuffersrc = avfilter_get_by_name("abuffer");
@@ -574,14 +576,15 @@ void VideoPlayerTexture::Seek(int64_t millis) {
     if (af2.has_value())
       af = std::move(af2);
     // NOTE: even when seeking backwards, the best we can do is get a frame after our target
-    if (done || (vf.has_value() && af.has_value() && vf->pts >= target_pts))
+    if (done || (vf.has_value() && (aStream == -1 || af.has_value()) && vf->pts >= target_pts))
       break;
-    if (vf.has_value() && af.has_value())
+    if (vf.has_value() && (aStream == -1 || af.has_value()))
       debug_log << "Skipping frame with pts=" << vf->pts << ", target=" << target_pts
                 << ", tolerance=" << vTolerance << ", backwards=" << isBackwards << std::endl;
   }
   current_video_frame = std::move(*vf);
-  current_audio_frame = std::move(*af);
+  if (aStream != -1)
+    current_audio_frame = std::move(*af);
   debug_log << "current_video_frame pts = " << current_video_frame.pts << ", target=" << target_pts
             << std::endl;
   m_video_frames.unlock();
@@ -591,6 +594,8 @@ void VideoPlayerTexture::Seek(int64_t millis) {
 }
 void VideoPlayerTexture::SetVolume(double volume2) {
   volume = volume2;
+  if (aStream == -1)
+    return;
   char buf[64];
   snprintf(buf, sizeof(buf), "%.3f", volume2);
   avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
