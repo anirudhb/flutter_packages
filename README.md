@@ -7,9 +7,11 @@ Various flutter packages.
 Windows implementation of the video_player native protocol.
 Uses libffmpeg (libav & friends) for video playback, and libao for audio playback.
 
+Playback speed is **not supported**.
+
 Things to do:
 
 - [x] Separate presentation threads
 - [x] Buffer frames (up to 200mb memory usage)
-- [ ] hardware decoding
+- [x] ~~hardware decoding~~ apparently is done by FFmpeg automatically
 - [ ] Setup ffmpeg zip download and remove hardcoded paths
