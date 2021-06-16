@@ -22,14 +22,6 @@ struct VolumeMessage {
   VolumeMessage(const flutter::EncodableValue &);
 };
 
-struct PlaybackSpeedMessage {
-  int64_t textureId;
-  double speed = 1;
-
-  PlaybackSpeedMessage() = default;
-  PlaybackSpeedMessage(const flutter::EncodableValue &);
-};
-
 struct TextureMessage {
   int64_t textureId;
 

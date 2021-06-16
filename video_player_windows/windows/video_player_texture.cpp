@@ -600,18 +600,6 @@ void VideoPlayerTexture::SetVolume(double volume2) {
   snprintf(buf, sizeof(buf), "%.3f", volume2);
   avfilter_graph_send_command(aFilterGraph, "volume", "volume", buf, NULL, 0, 0);
 }
-void VideoPlayerTexture::SetSpeed(double speed2) {
-  bool wasPaused = paused;
-  Pause();
-  speed = speed2;
-  pts_size_micros = av_q2d(cFormatCtx->streams[vStream]->time_base) * 1000000 / speed2;
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%.3f", speed2);
-  avfilter_graph_send_command(aFilterGraph, "atempo", "tempo", buf, NULL, 0, 0);
-  // Play will rescale the playback base
-  if (!wasPaused)
-    Play();
-}
 
 const FlutterDesktopPixelBuffer *VideoPlayerTexture::CopyPixelBuffer(size_t width, size_t height) {
   // Forces destructor to be called, so that memory doesn't leak

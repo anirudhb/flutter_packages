@@ -45,7 +45,6 @@ public:
   void Pause();
   void Seek(int64_t millis);
   void SetVolume(double volume);
-  void SetSpeed(double speed);
 
 private:
   std::tuple<bool, std::optional<VideoFrame>, std::optional<AudioFrame>> ReadFrame();
@@ -105,7 +104,6 @@ private:
   std::atomic<bool> stopped;
   std::atomic<bool> paused;
   std::atomic<double> volume = 1;
-  std::atomic<double> speed = 1;
   flutter::TextureRegistrar *registrar;
   int64_t tid;
   std::deque<VideoFrame> video_frames;

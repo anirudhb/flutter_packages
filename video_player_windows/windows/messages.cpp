@@ -53,26 +53,6 @@ VolumeMessage::VolumeMessage(const flutter::EncodableValue &value) {
   }
 }
 
-const auto kSpeedKey = flutter::EncodableValue("speed"s);
-
-PlaybackSpeedMessage::PlaybackSpeedMessage(const flutter::EncodableValue &value) {
-  if (!std::holds_alternative<flutter::EncodableMap>(value))
-    return;
-  flutter::EncodableMap map = std::get<flutter::EncodableMap>(value);
-  if (map.find(kTextureIdKey) != map.end()) {
-    flutter::EncodableValue thing = map[kTextureIdKey];
-    if (std::holds_alternative<int32_t>(thing))
-      textureId = std::get<int32_t>(thing);
-    if (std::holds_alternative<int64_t>(thing))
-      textureId = std::get<int64_t>(thing);
-  }
-  if (map.find(kSpeedKey) != map.end()) {
-    flutter::EncodableValue thing = map[kSpeedKey];
-    if (std::holds_alternative<double>(thing))
-      speed = std::get<double>(thing);
-  }
-}
-
 TextureMessage::TextureMessage(const flutter::EncodableValue &value) {
   if (!std::holds_alternative<flutter::EncodableMap>(value))
     return;

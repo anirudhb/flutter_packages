@@ -76,7 +76,7 @@ void VideoPlayerWindowsPlugin::SetupMethods(flutter::BinaryMessenger *messenger)
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.pause",
              std::bind(&VideoPlayerWindowsPlugin::HandlePause, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setPlaybackSpeed",
-             std::bind(&VideoPlayerWindowsPlugin::HandleSetSpeed, this, _1, _2));
+             std::bind(&VideoPlayerWindowsPlugin::TextureOpStub, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setVolume",
              std::bind(&VideoPlayerWindowsPlugin::HandleSetVolume, this, _1, _2));
   InitMethod(messenger, "dev.flutter.pigeon.VideoPlayerApi.setLooping",
@@ -191,20 +191,6 @@ void VideoPlayerWindowsPlugin::HandleSetVolume(
   std::unique_ptr<VideoPlayerTexture> &tex = textures[vm.textureId];
   tex->SetVolume(vm.volume);
   info_log << "Volume set to " << vm.volume << std::endl;
-  reply(WrapResult(std::monostate()));
-}
-
-void VideoPlayerWindowsPlugin::HandleSetSpeed(
-    const flutter::EncodableValue &message,
-    const flutter::MessageReply<flutter::EncodableValue> &reply) {
-  PlaybackSpeedMessage sm(message);
-  if (textures.find(sm.textureId) == textures.end()) {
-    reply(WrapError(flutter::EncodableValue("Texture not found")));
-    return;
-  }
-  std::unique_ptr<VideoPlayerTexture> &tex = textures[sm.textureId];
-  tex->SetSpeed(sm.speed);
-  info_log << "Speed set to " << sm.speed << std::endl;
   reply(WrapResult(std::monostate()));
 }
 
