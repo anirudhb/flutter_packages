@@ -341,6 +341,7 @@ void VideoPlayerTexture::FrameThreadProc() {
   while (!stopped) {
     // Check if paused
     if (paused) {
+    pause:
       while (paused && !stopped)
         std::this_thread::sleep_for(std::chrono::microseconds(1000));
       // Reset playback start
@@ -365,6 +366,8 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (done || stopped) {
         goto done;
       }
+      if (paused)
+        goto pause;
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
       if (!didBuffer)
         SendBufferingStart();
@@ -393,7 +396,6 @@ void VideoPlayerTexture::FrameThreadProc() {
             std::abs(video_frames.front().pts - frame.pts) > (1000000 / pts_size_micros))
           goto desync;
       }
-      // std::this_thread::sleep_for(target - now);
     }
     // force destruction
     current_video_frame = VideoFrame();
