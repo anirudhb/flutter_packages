@@ -5,6 +5,8 @@
 
 #include <flutter/encodable_value.h>
 
+void VideoPlayerStreamHandler::SetTextureHandlerRef() { texture->SetStreamHandlerRef(this); }
+
 flutter::EncodableValue VideoPlayerStreamHandler::ConstructInitialized() {
   flutter::EncodableMap m;
   // Safe to read our ptr since the video is always initialized prior
@@ -24,13 +26,24 @@ VideoPlayerStreamHandler::OnListenInternal(
     const flutter::EncodableValue *arguments,
     std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> &&events) {
   texture->fl_event_sink = std::move(events);
-  // Send the initialized event
-  texture->fl_event_sink->Success(ConstructInitialized());
-  // End buffering
-  flutter::EncodableMap m;
-  m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingEnd");
-  texture->fl_event_sink->Success(flutter::EncodableValue(m));
+  if (signal_latch) {
+    signal_latch = !signal_latch;
+    SignalInitialized();
+  }
   return nullptr;
+}
+
+void VideoPlayerStreamHandler::SignalInitialized() {
+  if (!texture->fl_event_sink) {
+    signal_latch = !signal_latch;
+  } else {
+    // Send the initialized event
+    texture->fl_event_sink->Success(ConstructInitialized());
+    // End buffering
+    flutter::EncodableMap m;
+    m[flutter::EncodableValue("event")] = flutter::EncodableValue("bufferingEnd");
+    texture->fl_event_sink->Success(flutter::EncodableValue(m));
+  }
 }
 
 std::unique_ptr<flutter::StreamHandlerError<flutter::EncodableValue>>

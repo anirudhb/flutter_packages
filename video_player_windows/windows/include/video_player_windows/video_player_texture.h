@@ -29,10 +29,9 @@ extern "C" {
 
 class VideoPlayerTexture {
 public:
-  VideoPlayerTexture(const std::string &uri);
-  VideoPlayerTexture(const VideoPlayerTexture &) = default;
-  VideoPlayerTexture(VideoPlayerTexture &&) = default;
   ~VideoPlayerTexture();
+  // Initializes the video player asynchronously
+  void InitAsync(const std::string &uri);
 
   // Returns the texture ID
   int64_t RegisterWithTextureRegistrar(flutter::TextureRegistrar *registrar);
@@ -62,6 +61,15 @@ private:
   void SendBufferingEnd();
   void SendCompleted();
 
+  /* Requires that init_uri is valid */
+  void Initialize();
+  /* Sets threads_initialized, does nothing if set.
+     Does nothing if this texture is not initialized.
+     Initializes decode_thread regardless since it is responsible for initializing the video. */
+  void InitializeThreads();
+
+  void SetStreamHandlerRef(VideoPlayerStreamHandler *handler);
+
   AVFormatContext *cFormatCtx = NULL;
   AVCodecContext *vCodecCtx = NULL;
   AVCodecContext *vCodecCtxOrig = NULL;
@@ -89,7 +97,7 @@ private:
 
   FlutterDesktopPixelBuffer fl_buffer;
   std::unique_ptr<flutter::TextureVariant> texture_;
-  std::unique_ptr<VideoPlayerStreamHandler> fl_stream_handler;
+  VideoPlayerStreamHandler *fl_stream_handler;
   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> fl_event_channel;
   std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> fl_event_sink;
   std::atomic<bool> has_stream_handler;
@@ -108,9 +116,13 @@ private:
   std::deque<AudioFrame> audio_frames;
   std::mutex m_audio_frames;
   AudioFrame current_audio_frame;
-  std::thread decodeThread;
-  std::thread frameThread;
-  std::thread audioThread;
+  std::optional<std::thread> decodeThread;
+  std::optional<std::thread> frameThread;
+  std::optional<std::thread> audioThread;
+
+  std::atomic<bool> initialized;
+  std::atomic<bool> threads_initialized;
+  std::optional<std::string> init_uri;
 
   friend class VideoPlayerStreamHandler;
 };

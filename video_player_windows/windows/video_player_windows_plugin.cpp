@@ -108,9 +108,10 @@ void VideoPlayerWindowsPlugin::HandleCreate(
   debug_log << "Debug print of message:" << std::endl;
   debug_log << DebugPrintValue(message) << std::endl;
   CreateMessage cm(message);
-  std::unique_ptr<VideoPlayerTexture> tex = std::make_unique<VideoPlayerTexture>(*cm.uri);
+  std::unique_ptr<VideoPlayerTexture> tex = std::make_unique<VideoPlayerTexture>();
   int64_t tid = tex->RegisterWithTextureRegistrar(registrar->texture_registrar());
   tex->SetupEventChannel(registrar->messenger());
+  tex->InitAsync(*cm.uri);
   textures.emplace(tid, std::move(tex));
   TextureMessage tm;
   tm.textureId = tid;

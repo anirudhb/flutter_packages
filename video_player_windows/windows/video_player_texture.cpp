@@ -28,7 +28,19 @@ extern "C" {
 static const char *filter_descr =
     "atempo=1.0,volume=1.0,aresample=44100,aformat=sample_fmts=u8:channel_layouts=stereo";
 
-VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
+void VideoPlayerTexture::InitAsync(const std::string &uri) { init_uri = uri; }
+
+void VideoPlayerTexture::SetStreamHandlerRef(VideoPlayerStreamHandler *handler) {
+  fl_stream_handler = handler;
+  has_stream_handler = true;
+}
+
+void VideoPlayerTexture::Initialize() {
+  if (!init_uri.has_value()) {
+    fatal_log << "init_uri doesn't have value!" << std::endl;
+    std::exit(1);
+  }
+  const std::string &uri = *init_uri;
   AVDictionary *opts = NULL;
   // 10 seconds
   av_dict_set(&opts, "timeout", "10000000", 0);
@@ -98,6 +110,13 @@ VideoPlayerTexture::VideoPlayerTexture(const std::string &uri) {
 
   swsCtx = sws_getContext(vCodecCtx->width, vCodecCtx->height, vCodecCtx->pix_fmt, vCodecCtx->width,
                           vCodecCtx->height, AV_PIX_FMT_RGBA, SWS_BILINEAR, NULL, NULL, NULL);
+
+  initialized = true;
+  if (has_stream_handler) {
+    fl_stream_handler->SignalInitialized();
+  }
+
+  InitializeThreads();
 }
 
 void VideoPlayerTexture::InitFilterGraph() {
@@ -158,14 +177,14 @@ void VideoPlayerTexture::InitFilterGraph() {
 
 VideoPlayerTexture::~VideoPlayerTexture() {
   stopped = true;
-  if (decodeThread.joinable()) {
-    decodeThread.join();
+  if (decodeThread.has_value()) {
+    decodeThread->join();
   }
-  if (audioThread.joinable()) {
-    audioThread.join();
+  if (audioThread.has_value()) {
+    audioThread->join();
   }
-  if (frameThread.joinable()) {
-    frameThread.join();
+  if (frameThread.has_value()) {
+    frameThread->join();
     registrar->UnregisterTexture(tid);
   }
   av_free(buffer);
@@ -193,15 +212,23 @@ int64_t VideoPlayerTexture::RegisterWithTextureRegistrar(flutter::TextureRegistr
         return this->CopyPixelBuffer(width, height);
       }));
 
-  decodeThread = std::thread(std::bind(&VideoPlayerTexture::DecodeThreadProc, this));
-  frameThread = std::thread(std::bind(&VideoPlayerTexture::FrameThreadProc, this));
-  if (aStream != -1)
-    audioThread = std::thread(std::bind(&VideoPlayerTexture::AudioThreadProc, this));
+  InitializeThreads();
 
   int64_t tid = registrar->RegisterTexture(texture_.get());
   this->tid = tid;
 
   return tid;
+}
+
+void VideoPlayerTexture::InitializeThreads() {
+  if (!decodeThread.has_value())
+    decodeThread = std::thread(std::bind(&VideoPlayerTexture::DecodeThreadProc, this));
+  if (threads_initialized || !initialized)
+    return;
+  frameThread = std::thread(std::bind(&VideoPlayerTexture::FrameThreadProc, this));
+  if (aStream != -1)
+    audioThread = std::thread(std::bind(&VideoPlayerTexture::AudioThreadProc, this));
+  threads_initialized = true;
 }
 
 void VideoPlayerTexture::SetupEventChannel(flutter::BinaryMessenger *messenger) {
@@ -210,12 +237,15 @@ void VideoPlayerTexture::SetupEventChannel(flutter::BinaryMessenger *messenger) 
   info_log << "Registering channel with name " << chan_name.str() << std::endl;
   fl_event_channel = std::make_unique<flutter::EventChannel<flutter::EncodableValue>>(
       messenger, chan_name.str(), &flutter::StandardMethodCodec::GetInstance());
-  fl_stream_handler = std::make_unique<VideoPlayerStreamHandler>(this);
-  fl_event_channel->SetStreamHandler(std::move(fl_stream_handler));
-  has_stream_handler = true;
+  auto handler = std::make_unique<VideoPlayerStreamHandler>(this);
+  fl_event_channel->SetStreamHandler(std::move(handler));
 }
 
 void VideoPlayerTexture::DecodeThreadProc() {
+  while (!init_uri.has_value()) {
+    std::this_thread::sleep_for(std::chrono::microseconds(1000));
+  }
+  Initialize();
   // Determine maximum number of queue items
   // Would like to keep memory usage <=200mb
   size_t max_queue_items = 209715200 / (vCodecCtx->width * vCodecCtx->height * 4);
