@@ -5,8 +5,9 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 include(FindFFmpeg.cmake)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/")
 if(WIN32)
-  set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} C:\\Users\\anirudh\\Downloads\\ffmpeg-4.4-full_build-shared\\lib)
-  set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} C:\\Users\\anirudh\\Downloads\\ffmpeg-4.4-full_build-shared\\include)
+  set(FFMPEG_HOME "C:\\Users\\anirudh\\Downloads\\ffmpeg-4.4-full_build-shared")
+  set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "${FFMPEG_HOME}/lib")
+  set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "${FFMPEG_HOME}/include")
 endif()
 find_package(FFmpeg REQUIRED COMPONENTS AVFORMAT AVCODEC AVFILTER AVUTIL SWSCALE SWRESAMPLE POSTPROC)
 
@@ -39,13 +40,13 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin liba
 
 # List of absolute paths to libraries that should be bundled with the plugin
 set(video_player_windows_bundled_libraries
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/avcodec-58.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/avfilter-7.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/avformat-58.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/avutil-56.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/postproc-55.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/swresample-3.dll"
-  "C:/Users/anirudh/Downloads/ffmpeg-4.4-full_build-shared/bin/swscale-5.dll"
+  "${FFMPEG_HOME}/bin/avcodec-58.dll"
+  "${FFMPEG_HOME}/bin/avfilter-7.dll"
+  "${FFMPEG_HOME}/bin/avformat-58.dll"
+  "${FFMPEG_HOME}/bin/avutil-56.dll"
+  "${FFMPEG_HOME}/bin/postproc-55.dll"
+  "${FFMPEG_HOME}/bin/swresample-3.dll"
+  "${FFMPEG_HOME}/bin/swscale-5.dll"
   ${FFMPEG_LIBRARIES}
   PARENT_SCOPE
 )
