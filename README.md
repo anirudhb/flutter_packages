@@ -14,4 +14,4 @@ Things to do:
 - [x] Separate presentation threads
 - [x] Buffer frames (up to 200mb memory usage)
 - [x] ~~hardware decoding~~ apparently is done by FFmpeg automatically
-- [ ] Setup ffmpeg zip download and remove hardcoded paths
+- [x] Setup ffmpeg zip download and remove hardcoded paths
