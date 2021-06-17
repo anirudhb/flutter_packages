@@ -4,19 +4,23 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 include(FindFFmpeg.cmake)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/")
-if(WIN32)
-  set(FFMPEG_HOME "C:\\Users\\anirudh\\Downloads\\ffmpeg-4.4-full_build-shared")
-  set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "${FFMPEG_HOME}/lib")
-  set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "${FFMPEG_HOME}/include")
-endif()
+set(FFMPEG_HOME "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg_libs/ffmpeg-4.4-full_build-shared")
+set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "${FFMPEG_HOME}/lib")
+set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "${FFMPEG_HOME}/include")
+
+file(DOWNLOAD https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z "${FFMPEG_HOME}.7z"
+  SHOW_PROGRESS
+  EXPECTED_HASH SHA256=4aaf80f0ee78a9eb5a1396742fd51d1624a705bfa7ce263e9b440b8be7db5650
+)
+file(ARCHIVE_EXTRACT INPUT "${FFMPEG_HOME}.7z"
+  DESTINATION "${FFMPEG_HOME}/.."
+  PATTERNS "ffmpeg-*/*"
+)
+
 find_package(FFmpeg REQUIRED COMPONENTS AVFORMAT AVCODEC AVFILTER AVUTIL SWSCALE SWRESAMPLE POSTPROC)
 
-message(INFO ${FFMPEG_INCLUDE_DIRS})
-message(INFO ${FFMPEG_LIBRARIES})
-
-string(REPLACE " /WX" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-
 add_subdirectory(libao-cmake)
+set_target_properties(libao PROPERTIES COMPILE_OPTIONS "/w")
 
 # This value is used when generating builds using this plugin, so it must
 # not be changed
