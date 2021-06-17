@@ -402,8 +402,11 @@ void VideoPlayerTexture::FrameThreadProc() {
       if (done || stopped) {
         goto done;
       }
-      if (paused)
+      if (paused) {
+        if (didBuffer)
+          SendBufferingEnd();
         goto pause;
+      }
       std::this_thread::sleep_for(std::chrono::microseconds(1000));
       if (!didBuffer)
         SendBufferingStart();
