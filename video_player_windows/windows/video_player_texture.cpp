@@ -40,6 +40,9 @@ void VideoPlayerTexture::Initialize() {
     fatal_log << "init_uri doesn't have value!" << std::endl;
     std::exit(1);
   }
+  /* Suppress logging to errors */
+  av_log_set_level(AV_LOG_ERROR);
+
   const std::string &uri = *init_uri;
   AVDictionary *opts = NULL;
   // 10 seconds
@@ -52,8 +55,9 @@ void VideoPlayerTexture::Initialize() {
   }
   av_dict_free(&opts);
   avformat_find_stream_info(cFormatCtx, NULL);
-  // debug
+#ifdef LOG_DEBUG
   av_dump_format(cFormatCtx, 0, uri.c_str(), 0);
+#endif
   vStream = -1;
   for (int i = 0; i < cFormatCtx->nb_streams; i++) {
     switch (cFormatCtx->streams[i]->codec->codec_type) {
@@ -435,7 +439,7 @@ void VideoPlayerTexture::FrameThreadProc() {
     registrar->MarkTextureFrameAvailable(tid);
     continue;
   desync:
-    warn_log << "video got desynced (is the video being seeked backwards?), dropping frame"
+    warn_log << "Video got desynced (is the video being seeked backwards?), dropping frame"
              << std::endl;
   }
 done:
