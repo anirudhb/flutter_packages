@@ -47,6 +47,7 @@ void VideoPlayerTexture::Initialize() {
   AVDictionary *opts = NULL;
   // 10 seconds
   av_dict_set(&opts, "timeout", "10000000", 0);
+  av_dict_set(&opts, "reconnect_on_network_error", "1", 0);
 
   if (avformat_open_input(&cFormatCtx, uri.c_str(), NULL, &opts) != 0) {
     av_dict_free(&opts);
@@ -311,7 +312,14 @@ void VideoPlayerTexture::AudioThreadProc() {
   ao_initialize();
   ao_sample_format format;
   format.byte_format = AO_FMT_NATIVE;
-  format.matrix = "L,R";
+  switch (aCodecCtx->channels) {
+  case 1:
+    format.matrix = "M";
+    break;
+  default:
+    format.matrix = "L,R";
+    break;
+  }
   format.channels = aCodecCtx->channels;
   format.bits = 8;
   format.rate = 44100;
@@ -357,7 +365,8 @@ void VideoPlayerTexture::AudioThreadProc() {
            That is, if the peeked frame's pts is >1s away from the current frame
          */
         if (!audio_frames.empty() &&
-            std::abs(audio_frames.front().pts - frame.pts) > (1000000 / pts_size_micros))
+            std::abs(audio_frames.front().pts - frame.pts) >
+                (1000000 / (av_q2d(cFormatCtx->streams[aStream]->time_base) * 1000000)))
           goto desync;
       }
     }
