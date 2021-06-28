@@ -19,6 +19,9 @@ file(ARCHIVE_EXTRACT INPUT "${FFMPEG_HOME}.7z"
 
 find_package(FFmpeg REQUIRED COMPONENTS AVFORMAT AVCODEC AVFILTER AVUTIL SWSCALE SWRESAMPLE POSTPROC)
 
+execute_process(COMMAND git submodule update --init --recursive
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_subdirectory(libao-cmake)
 set_target_properties(libao PROPERTIES COMPILE_OPTIONS "/w")
 
