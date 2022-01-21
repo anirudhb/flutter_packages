@@ -8,9 +8,9 @@ set(FFMPEG_HOME "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg_libs/ffmpeg-4.4-full_build-s
 set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "${FFMPEG_HOME}/lib")
 set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "${FFMPEG_HOME}/include")
 
-file(DOWNLOAD https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full-shared.7z "${FFMPEG_HOME}.7z"
+file(DOWNLOAD https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-4.4.1-full_build-shared.7z "${FFMPEG_HOME}.7z"
   SHOW_PROGRESS
-  EXPECTED_HASH SHA256=e5900f6cecd4c438d398bd2fc308736c10b857cd8dd61c11bcfb05bff5d1211a
+  EXPECTED_HASH SHA256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 )
 file(ARCHIVE_EXTRACT INPUT "${FFMPEG_HOME}.7z"
   DESTINATION "${FFMPEG_HOME}/.."
